@@ -1,0 +1,49 @@
+/**
+@defgroup tdm Tamper Detect Module (TDM)
+@brief The S32 SDK provides driver for Tamper Detect Module
+@n
+TDM module driver supports read TDM status; override a locked region by key, or by writing to diary flash region.
+*/
+/**
+@defgroup tdm_driver TDM Driver
+@ingroup tdm
+@brief This module covers the functionality of the Tamper Detect Module (TDM) driver.
+
+  ## Features ##
+    - Get locked/unlocked status of a tamper detection region.
+    - Unlock a tamper detection region by key
+    - Unlock a tamper detection region by writing to diary flash region.
+
+  ## Important Notes ##
+<p>
+  - Unlocking a tamper detection region by key can be unsuccessful if that tamper detection region's STO_DIS DCF client is set.
+</p>
+
+Before using the TDM driver a series of DCF Clients should be written. Each flash memory block can be assigned to any tamper detection
+region (TDR) using the Tamper Region Assignment DCF Client. More information about the DCF Clients and DCF Records can be found in Reference 
+Manual at Chapter 11 Device Configuration Format (DCF) records.
+
+  ## Example to erase a flash block assigned to a TDR ##
+
+@code
+
+    /* Define the size and content of a diary entry */
+    #define TDR_DATA_SIZE   8
+    uint8_t tdrData[TDR_DATA_SIZE] = { ... }
+
+    /* Write a entry in the corresponding TDR diary */
+    retCode = TDM_DRV_WriteDiary(TDR_NO, tdrData, TDR_DATA_SIZE);
+    if (retCode == STATUS_SUCCESS)
+    {
+        /* The flash sector can be erased now */
+    }
+    else if (retCode == STATUS_TDM_DIARY_FULL)
+    {
+        /* The diary is full; optionally the diary can be disabled to allow the erase */
+        TDM_DRV_BypassTDRByKey(TDR_NO);
+        /* The flash sector can be erased now */
+    }
+@endcode
+
+
+*/

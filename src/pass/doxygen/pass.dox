@@ -1,0 +1,165 @@
+
+/*!
+    @defgroup pass Password and Device Security Module (PASS)
+    The PASS module is used to implement password-based read and write protection for
+    flash blocks. Up to four levels of password protection can be implemented for each flash
+    block.
+
+    ## Hardware background ##
+
+    The PASS includes these distinctive features:
+        - Life Cycle status
+        - Password comparison
+        - JTAG password comparison
+        - Test mode enable Configuration and Password Comparison
+        - Flash read, write, and erase control
+
+    <b>NOTE:</b> To be able to run PASS module, the lifecycle of the chip must be OEM or later. There are four levels of password used to protect each flash block. They are called "passgroup". To be able to access to the specific block, user has to unlock operation for all those four passgroups.
+
+    @addtogroup pass_driver
+    @ingroup pass
+
+    ## How to use the PASS driver in your application ##
+
+    PASS driver supports the following functionalities:
+    1. Get current life cycle of the device:
+        @code
+        pass_life_cycle_t lifeCycle;
+
+        lifeCycle = PASS_DRV_GetLifeCycle();
+        @endcode
+        PASS module takes effect only in OEM cycle or later.
+    2. Check if the given blocks of FLASH memory are writable/erasable or not.
+        FLASH memory is divided into some types of block defined in pass_flash_block_t enumeration. Each block type has a lot of blocks. Please refer to Reference Manual of the device for more information about address of each block.
+        The function PASS_DRV_GetWriteEraseStatus is used to get the status of those blocks.
+            @code
+            status_t PASS_DRV_GetWriteEraseStatus(pass_flash_block_t blockType,
+                                                  uint8_t passgroup,
+                                                  uint32_t * status);
+            @endcode
+            - "passgroup" parameter determines which group you want to check. PASS module supports up to 4 level of group. A block is completely unlocked only when that block is unlocked with all of the groups.
+            - "status" parameter contains the current state of blocks. A value of 1 in a bit of "status" signifies that the corresponding block is locked for program and erase. Please refer to the Reference Manual for more information about the list of blocks and the corresponding bits.
+        A block is completely unlocked only when it is unlocked with all 4 passgroups. The following example will get the status of blocks in the LOW_MIDDLE area with group 0.
+        @code
+        uint32_t status = 0;
+
+        if (STATUS_SUCCESS != PASS_DRV_GetWriteEraseStatus(PASS_FLASH_BLOCK_LOW_MIDDLE, 0, &status))
+        {
+            /* Error occurs */
+        }
+        @endcode
+    3. Check if the given blocks of FLASH memory are readable or not.
+        FLASH memory is divided into some regions defined in pass_flash_region_t enumeration. Please refer to Reference Manual of the device for more information about address of each block.
+        A block is completely unlocked only when it is unlocked with all 4 passgroups.
+        The following example will get the status memory region of group 0.
+            + On Calypso, RL3 region is mapped to HSM Code area (add code: #define PASS_FLASH_REGION_RLx PASS_FLASH_REGION_RL3).
+            + On Treeruner, Rainier and Cobra, RL2 region is mapped to EEPROM area (add code: #define PASS_FLASH_REGION_RLx PASS_FLASH_REGION_RL2).
+
+        @code
+        pass_read_state_t status;
+
+        if (STATUS_SUCCESS != PASS_DRV_GetReadStatus(PASS_FLASH_REGION_RLx, 0, &status))
+        {
+            /* Error occurs */
+        }
+        @endcode
+    4. Lock or unlock the write/erase operation for given blocks of FLASH memory.
+        The function PASS_DRV_SetWriteEraseState is used to set the new state (LOCK or UNLOCK) for given blocks of FLASH memory. Refer to the PASS_DRV_GetWriteEraseStatus function for more information about parameters.
+            @code
+            status_t PASS_DRV_SetWriteEraseState(pass_flash_block_t blockType,
+                                                 uint8_t passgroup,
+                                                 uint32_t newState);
+            @endcode
+        <b>NOTE:</b> To be able to use this function, the passgroup used to set must be unlocked. Refer to PASS_DRV_UnlockPassgroup function for more information.
+    5. Lock or unlock the read operation for given regions of FLASH memory.
+        The function PASS_DRV_SetReadState is used to set the new state (LOCK or UNLOCK) for given regions of FLASH memory. Refer to the PASS_DRV_GetReadStatus function for more information about parameters.
+            @code
+            status_t PASS_DRV_SetReadState(pass_flash_region_t region,
+                                           uint8_t passgroup,
+                                           pass_read_state_t newState);
+            @endcode
+        NOTE: To be able to use this function, the passgroup used to set must be unlocked. Refer to PASS_DRV_UnlockPassgroup function for more information.
+    6. Check and unlock the passgroup:
+        To be able to use the functions PASS_DRV_SetWriteEraseState and PASS_DRV_SetReadState with a given passgroup, then that passgroup must be unlocked.
+        User must provide a 256-bit correct password to unlock the passgroup.
+        @code
+        status_t PASS_DRV_UnlockPassgroup(uint8_t passgroup,
+                                          uint32_t * password);
+        @endcode
+
+        The function PASS_DRV_PassgroupIsUnlock is used to check a given passgroup is unlocked or not.
+
+<b>Examples:</b>
+The following example will show you the usage of PASS driver.
+
+@code
+int main(void)
+{
+    pass_life_cycle_t currentLifeCycle;
+    uint32_t newState;
+
+    /* Password to unlock passgroup 0. This password must be consistent with the password stored in "PASS Password Group 0" area in UTEST memory */
+    uint8_t passwordGroup0[32] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+    /* Password to unlock passgroup 1. This password must be consistent with the password stored in "PASS Password Group 1" area in UTEST memory */
+    uint8_t passwordGroup1[32] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+    /* Password to unlock passgroup 2. This password must be consistent with the password stored in "PASS Password Group 2" area in UTEST memory */
+    uint8_t passwordGroup2[32] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+    /* Password to unlock passgroup 3. This password must be consistent with the password stored in "PASS Password Group 3" area in UTEST memory */
+    uint8_t passwordGroup3[32] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+    /* Get the lifecycle of the chip. It must be OEM or later */
+    currentLifeCycle = PASS_DRV_GetLifeCycle();
+    if (currentLifeCycle < PASS_LC_OEM_PRODUCTION)
+    {
+        return 0;   /* PASS module does not work in MCU production and Custom delivery cycles */
+    }
+
+    /* Unlock four passgroups. */
+    PASS_DRV_UnlockPassgroup(0, passwordGroup0);
+    PASS_DRV_UnlockPassgroup(1, passwordGroup1);
+    PASS_DRV_UnlockPassgroup(2, passwordGroup2);
+    PASS_DRV_UnlockPassgroup(3, passwordGroup3);
+
+    /* Unlock write operation for a middle block from address 0x00F90000 to 0x00F93FFF (16 KB Code Flash Block 0 (RWW partition 2)).
+       This address is applied to MPC5748G and MPC5746C. It is different on other devices. Refer to the Reference Manual of the device you are working on for more detail */
+    newState = 0xFFFFFFFE;  /* This block is corresponding to the bit 0 on Calypso. */
+    PASS_DRV_SetWriteEraseState(PASS_FLASH_BLOCK_LOW_MIDDLE, 0, newState);      /* Unlock write operation for passgroup 0 */
+    PASS_DRV_SetWriteEraseState(PASS_FLASH_BLOCK_LOW_MIDDLE, 1, newState);      /* Unlock write operation for passgroup 1 */
+    PASS_DRV_SetWriteEraseState(PASS_FLASH_BLOCK_LOW_MIDDLE, 2, newState);      /* Unlock write operation for passgroup 2 */
+    PASS_DRV_SetWriteEraseState(PASS_FLASH_BLOCK_LOW_MIDDLE, 3, newState);      /* Unlock write operation for passgroup 3 */
+
+    /* Unlock read operation for code region */
+    PASS_DRV_SetReadState(PASS_FLASH_REGION_RL1, 0, PASS_READ_STATE_UNLOCKED);
+    PASS_DRV_SetReadState(PASS_FLASH_REGION_RL1, 1, PASS_READ_STATE_UNLOCKED);
+    PASS_DRV_SetReadState(PASS_FLASH_REGION_RL1, 2, PASS_READ_STATE_UNLOCKED);
+    PASS_DRV_SetReadState(PASS_FLASH_REGION_RL1, 3, PASS_READ_STATE_UNLOCKED);
+
+    /* User code to access to the Flash memory for the unlocked block */
+
+
+    while (1)
+    {
+
+    }
+}
+@endcode
+
+<b>NOTE:</b> To be able to run above example, the following DCF records must be setup:
+    - Move the lifecycle of the chip to OEM or later.
+    - For testing purpose, you should disable Censorship. If you don't disable Censorship, you might be asked a JTAG password to access to the debugger.
+    - Default passwords to unlock four passgroups are 32-byte 0xFF. If you want to change these passwords, please write your passwords to the "PASS Password group x" area in UTEST region (x is from 0 to 3).
+    - If you run the example on Flash, you have to clear the DCF records corresponding to the flash blocks that code is located at. If not, debugger will be not able to erase and program the code to the flash memory.
+    - On Rainier, Password Challenge passwords and JTAG passwords that are all 0’s or all 1’s are invalid.
+
+@}*/

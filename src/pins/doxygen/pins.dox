@@ -1,0 +1,175 @@
+/*!
+@defgroup pins Pins Driver (PINS)
+@brief The S32 SDK provides Peripheral Drivers for the PINS module of S32K1xx, S32MTV,
+S32V234, MPC574xx, S32Rx7x and S32S247TV devices.
+@details The module provides dedicated pad control to general-purpose pads that can be
+configured as either inputs or outputs. The PINS module provides registers that enable
+user software to read values from GPIO pads configured as inputs, and write values to
+GPIO pads configured as outputs:
+- When configured as output, you can write to an internal register to control the state
+driven on the associated output pad.
+- When configured as input, you can detect the state of the associated pad by reading
+the value from an internal register.
+- When configured as input and output, the pad value can be read back, which can be
+used as a method of checking if the written value appeared on the pad.
+
+The PINS supports these following features:
+
+For S32K1xx and S32MTV devices: Pins driver is based on PORT (Port Control and Interrupt) and GPIO
+(General-Purpose Input/Output) modules
+* Pin interrupt
+- Interrupt flag and enable registers for each pin
+- Support for edge sensitive (rising, falling, both) or level sensitive (low, high) configured per pin
+- Support for interrupt or DMA request configured per pin
+- Asynchronous wake-up in low-power modes
+- Pin interrupt is functional in all digital pin muxing modes
+- Peripheral trigger output (active high, low) configured per pin
+* Digital input filter
+- Digital input filter for each pin, usable by any digital peripheral muxed onto the pin
+- Individual enable or bypass control field per pin
+- Selectable clock source for digital input filter with a five bit resolution on filter size
+- Functional in all digital pin multiplexing modes
+* Port control
+- Individual pull control fields with pullup, pulldown, and pull-disable support
+- Individual drive strength field supporting high and low drive strength
+- Individual slew rate field supporting fast and slow slew rates
+- Individual input passive filter field supporting enable and disable of the individual input passive filter
+- Individual open drain field supporting enable and disable of the individual open drain output
+- Individual over-current detect enable with over-current detect flag and associated interrupt
+- Individual mux control field supporting analog or pin disabled, GPIO, and up to 6 chip-specific digital functions
+- Pad configuration fields are functional in all digital pin muxing modes
+
+For S32S247TV, S32V234, MPC574xx and S32Rx7x devices: Pins driver is based on SIUL2 (System Integration Unit Lite2) module
+* The System Integration Unit Lite2 supports these distinctive features:
+- 1 to 32 GPIO ports with data control
+- Drive data to as many as 16 independent I/O channels
+- Sample data from as many as 16 independent I/O channels
+* Two 16-bit registers can be read/written with one access for a 32-bit port, if needed.
+* External interrupt/DMA request support with:
+- 1 to 4 system interrupt vectors for 1 to 4 interrupt sources with independent interrupt
+masks. For 32 external interrupt sources (REQ pins), four groups have eight interrupt
+sources each, and each of the four groups is assigned one system interrupt vector.
+- 1 to 32 programmable digital glitch filters, one for each REQ pin
+- 1 to 4 system DMA request channels up to 32 REQ pins, depending on device using
+- Edge detection
+* Additionally the SIUL2 contains the Multiplexed Signal Configuration Registers
+(MSCR) that configure the electrical parameters and settings for as many as 512
+functional pads. The number of these registers that is actually implemented varies by
+device. These registers configure the following pad features:
+- Drive strength
+- Output impedance control
+- Open drain/source output enable
+- Slew rate control
+- Hysteresis control
+- Inversion control
+- Internal pull control and pull selection
+- Pin function assignment
+- Control of analog path switches
+- Safe mode behavior configuration
+* S32S247TV supports multiple SIUL2 instances (SIUL2_0, SIUL2_1, SIUL2_AE) and pins can be controled by 1 instances or
+multiple instances at the given time.
+
+For MPC5777C: Pins driver is based on SIU (System Integration Unit) module
+* The System Integration Unit supports these distinctive features:
+- 1 to 16 GPIO ports with data control
+- Drive data to as many as 32 independent I/O channels
+- Sample data from as many as 32 independent I/O channels
+* External interrupt/DMA request support with:
+- 1 to 4 system interrupt vectors for 1 to 4 interrupt sources with independent interrupt
+masks. There are 16 external interrupt inputs IRQ[0]–IRQ[15] to the SIU. The IRQ inputs
+can be configured for rising-edge events, falling-edge events, or both.
+- 1 to 4 system DMA request channels for 1 to 4 REQ pins
+- Edge detection
+* Additionally the SIU contains the Pad Configuration Registers (PCR) that configure
+the electrical parameters and settings for as many as 512 functional pads.
+The number of these registers that is actually implemented varies by
+device. These registers configure the following pad features:
+- Weak pullup/down enable/disable
+- Weak pullup/down selection
+- Slew-rate selection for outputs
+- Drive strength selection for outputs
+- Input buffer enable (when direction is configured for output)
+- Input hysteresis enable/disable
+- Open drain/push-pull output selection
+- Multiplexed function selection
+- Data direction selection
+*/
+
+# Basic Operations of PINS
+___________
+1. To initialize the PINS module, call PINS_DRV_Init() function and pass
+   the user pin_settings_config_t configuration data structure to it.
+    This is example code to configure the PINS driver using PINS_DRV_Init() function:
+~~~~~{.c}
+    /*! @brief User number of configured pins */
+    #define NUM_OF_CONFIGURED_PINS 28
+
+    /*! @brief User configuration structure */
+    pin_settings_config_t g_pin_mux_InitConfigArr[NUM_OF_CONFIGURED_PINS];
+
+    /* Initializes the PINS */
+    PINS_DRV_Init(NUM_OF_CONFIGURED_PINS, g_pin_mux_InitConfigArr);
+~~~~~
+Note:
+- PINS driver bases on SIUL2 module, the port_data_direction_t field in pin_settings_config_t
+  is no longer supported. User does not need to declare it in configuration data structure.
+- For CPUs such as MPC5746R, which uses MSCR[ODC] instead of MSCR[OBE] bit to control output gate signal
+  when generating pins configuration for output signal then Push-Pull state (MSCR[ODC] = 0x2)
+  will be generated as the default state. In case it's not as your desire state, please update value
+  in ODC column in Functional Properties table
+- For CPUs have SIU module, the pin name was defined following primary function of pin. PinSetting component
+  can not support specific names like that so all pin names are re-defined as following rule with 32 pins
+  for 1 port. For example:
+    PCR[0]->PCR[31]:  PTA[0]->PTA[31]
+    PCR[32]->PCR[63]: PTB[0]->PTB[31]
+    and so on ...
+- For CPUs such as MPC5777C, MPC5746R, some module names were re-named from letter to number. For example:
+    eTPU_A -> eTPU_0
+    eTPU_B -> eTPU_1
+    and so on ...
+  There is an exception for SDADC module to be consistent with Reference Manual:
+    SDADC_A -> SDADC_1
+    SDADC_B -> SDADC_2
+    SDADC_C -> SDADC_2
+    SDADC_D -> SDADC_3
+- For CPUs such as S32S247TV, all pin names of SIUL2_AE instance are not in the naming rule as other SIUL2
+  so they are re-named to be able to work with pins driver code
+    MSCR[0]->MSCR[15]:   PTA_AE
+    MSCR[16]->MSCR[31]:  PTB_AE
+    MSCR[32]->MSCR[43]:  PTC_AE
+~~~~~
+
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+### For S32K11x and S32MTV ###
+${S32SDK_PATH}\platform\drivers\src\pins\port\port_hw_access.c
+${S32SDK_PATH}\platform\drivers\src\pins\port\pins_port_driver.c
+### For MPC574xx and S32Rx7x and S32V234 ###
+${S32SDK_PATH}\platform\drivers\src\pins\siul2\siul2_hw_access.c
+${S32SDK_PATH}\platform\drivers\src\pins\siul2\pins_siul2_driver.c
+### For S32S247TV ###
+${S32SDK_PATH}\platform\drivers\src\pins\siul2_multi_regions\siul2_hw_access.c
+${S32SDK_PATH}\platform\drivers\src\pins\siul2_multi_regions\pins_siul2_driver.c
+### For MPC5777C ###
+${S32SDK_PATH}\platform\drivers\src\pins\siu\siu_hw_access.c
+${S32SDK_PATH}\platform\drivers\src\pins\siu\pins_siu_driver.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+*/

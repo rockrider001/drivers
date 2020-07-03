@@ -1,0 +1,181 @@
+/*!
+    @defgroup usdhc Secure Digital Host Controller (uSDHC)
+    @details
+    The Ultra Secured Digital Host Controller (uSDHC) provides the interface between the
+    host system and the SD/SDIO/MMC cards. The uSDHC acts as a bridge, passing host bus
+    transactions to the SD/SDIO/MMC cards by sending commands and performing data accesses
+    to/from the cards. It handles the SD/SDIO/MMC protocols at the transmission level.
+
+    The following are brief descriptions of the cards supported by the uSDHC:
+    The Multi Media Card (MMC) is a universal low cost data storage and communication
+    media designed to cover a wide array of applications including mobile video and gaming.
+    Previous MMC cards were based on a 7-pin serial bus with a single data pin, while the
+    new high speed MMC communication is based on an advanced 11-pin serial bus
+    designed to operate in the low voltage range.
+    The Secure Digital Card (SD) is an evolution of the old MMC technology. It is
+    specifically designed to meet the security, capacity, performance, and environment
+    requirements inherent in newly-emerging audio and video consumer electronic devices.
+    The physical form factor, pin assignment and data transfer protocol are forward compatible with the old MMC (with some additions).
+    Under the SD protocol, it can be categorized into Memory card, I/O card and Combo
+    card, which has both memory and I/O functions. The memory card invokes a copyright
+    protection mechanism that complies with the security of the SDMI standard. The I/O
+    card, which is also known as SDIO card, provides high-speed data I/O with low power
+    consumption for mobile electronic devices. For the sake of simplicity, the following
+    figure does not show cards with reduced size or mini cards.
+
+    ## Hardware background ##
+
+    The features of the uSDHC module include the following:
+        - Conforms to the SD Host Controller Standard Specification version 3.0, including
+          Test Event register support
+        - Compatible with the MMC System Specification version 4.2/4.3/4.4/4.5
+        - Compatible with the SD Memory Card Specification version 3.0 and supports the
+          Extended Capacity SD Memory Card
+        - Compatible with the SDIO Card Specification version 3.0
+        - Designed to work with SD Memory, miniSD Memory, SDIO, miniSDIO, SD
+          Combo, MMC, MMC plus, and MMC RS cards
+        - Card bus clock frequency up to 40 MHz
+        - Supports 1-bit / 4-bit SD and SDIO modes, 1-bit / 4-bit / 8-bit MMC modes
+        - Up to 160 Mbps of data transfer for SD/SDIO card using 4 parallel data lines in
+          High Speed mode
+        - Up to 160 Mbps of data transfer for SDXC card using 4 parallel data lines in
+          High Speed mode
+        - Up to 320 Mbps of data transfer for MMC cards using 8 parallel data lines in
+          High Speed mode
+        - DDR not supported
+        - Supports single block, multi-block read and write
+        - Supports block sizes of 1 ~ 4096 bytes
+        - Supports the write protection switch for write operations
+        - Supports both synchronous and asynchronous abort
+        - Supports pause during the data transfer at block gap
+        - Supports SDIO Read Wait and Suspend Resume operations
+        - Supports Auto CMD12 for multi-block transfer
+        - Host can initiate non-data transfer command while data transfer is in progress
+        - Allows cards to interrupt the host in 1-bit and 4-bit SDIO modes, also supports
+          interrupt period
+        - Embodies a fully configurable 128x32-bit FIFO for read/write data
+        - Supports internal and external DMA capabilities
+        - Support voltage selection by configuring vendor specific register bit
+        - Supports Advanced DMA to perform linked memory access
+
+    ## Unsupported features ##
+
+    The driver implementation does not support for the moment the following features:
+
+
+    @addtogroup usdhc_driver
+    @ingroup usdhc
+
+    ## How to use the uSDHC driver in your application ##
+    The following steps are used to configure and use uSDHC in your application:
+        1. Initialization: This step must be done before using the rest of APIs.
+            @code
+            #define uSDHC_INSTANCE      0
+            usdhc_state_t g_usdhcState;
+            uint8_t g_usdhcAdmaTable[32];
+            usdhc_config_t * usdhcConfig;
+
+            usdhcConfig->cardDetectDat3 = false;    /* Disable card detection by CD/DAT3 pin */
+            usdhcConfig->endianMode = uSDHC_ENDIAN_MODE_LITTLE;
+            usdhcConfig->dmaMode = uSDHC_DMA_MODE_ADMA2;    /* Use ADMA2 to transfer data */
+            usdhcConfig->admaTable = g_usdhcAdmaTable;      /* ADMA table used to transfer data through ADMA */
+            usdhcConfig->admaTableSize = sizeof(g_usdhcAdmaTable);
+            uSDHC_DRV_Init(uSDHC_INSTANCE, &g_usdhcState, usdhcConfig);     /* Call uSDHC_DRV_Init function to initialize the uSDHC module */
+            @endcode
+            <b>Note:</b> ADMA table is used to transfer data using ADMA1 or ADMA2. The size of ADMA table is depend on how many bytes of data you want to send at the same time. The size of ADMA table in bytes. For ADMA1, driver needs two tables(8 bytes) per a transfer: one for configure the start address(be 4KB align) and the next table for configure length data; following the setup, driver can transfer maximum 61440 bytes(0xF000 -> align with 4096) of data at the same time. For ADMA2, each ADMA table preempt 8 bytes and able to transfer maximum 65532 bytes(0xFFFC -> align with 4) of data at the same time; for configuration, the start address is 32-bit boundary. In above example, g_usdhcAdmaTable array has 32 bytes, and DMA mode is ADMA2. So, you can only transfer maximum is (32/8) * 65532 = 262128 bytes at the same time. If you want to transfer more data at the same time, you have to declare more ADMA table.
+        2. Set bus clock for uSDHC:
+            - Normally, clock frequency of uSDHC will be set to 400KHz first. Then, after card type is identified, you can set the clock frequency corresponding to the card type to support higher speed.
+            @code
+            uSDHC_DRV_SetBusClock(uSDHC_INSTANCE, 400000);
+            @endcode
+        3. Activate the card: This step is depend on your card. If your card require activating, you have to do this step. The following function is used to send 80 clock cycles to the card to activate the card.
+            @code
+            uSDHC_DRV_SetCardActive(uSDHC_INSTANCE, 1000);  /* Timeout value is 1000 ms */
+            @endcode
+        4. Set data bus width: This step is depend on connection between card and microprocessor. Please set data bus width corresponding to the number of DATA pin. Typical value is 4 bit
+            @code
+            uSDHC_DRV_SetDataBusWidth(uSDHC_INSTANCE, uSDHC_DATA_BUS_WIDTH_4BIT);
+            @endcode
+        5. Send a command or data to the card:
+            - COMMAND or DATA to be transfered is wrapped in a TRANSFER object (usdhc_transfer_t). So, you have to define a TRANSFER object to be able to send a COMMAND or DATA.
+            - In a TRANSFER object, COMMAND can be not NULL, DATA can be NULL if you don't want to send or receive data.
+            - a COMMAND will have the following parameters:
+                + index: The index of the command. For example, index of CMD0 is 0, index of CMD1 is 1. Please refer to the specification of your card to know which commands are supported.
+                + argument: The argument of the command. This parameter is optional and depend on each command.
+                + type: Determine one of the command types in usdhc_command_type_t enumeration. This parameter is optional and depend on each command. Default value is NORMAL type.
+                + responseType: Determine one of the response types in usdhc_response_type_t enumeration. This parameter is depend on each command.
+                + response[4U]: 4 bytes to store the response from card. This parameter is filled by driver, user can read this parameter get the response from card when a command is sent successfully.
+            - a DATA will have the following parameters:
+                + enableAutoCMD12: true or false. After each time transferring data, a CMD12 command must be sent to the card to stop data transmission. You can set this parameter to "true" so that uSDHC module will send CMD12 command automatically.
+                + blockSize: The size of each block you want to send/receive.
+                + blockCount: The number of blocks you want to send/receive.
+                + rxData: The pointer to the buffer to store the received data. Receive buffer must be 4-byte aligned for ADMA2 and 4096-byte aligned for ADMA1.
+                + txData: The pointer to the buffer that you want to send out. Send buffer must be 4-byte aligned for ADMA2 and 4096-byte aligned for ADMA1.
+            - You can use either uSDHC_DRV_TransferBlocking function or uSDHC_DRV_Transfer function to transfer a command or data.
+                + uSDHC_DRV_TransferBlocking: This function transfer a command or data by blocking method. This function will wait for completion before returning.
+                + uSDHC_DRV_Transfer: This function transfer a command or data by non-blocking method. This function will return immediately without waiting for completion. To be able to know the result of transmission, you have to use uSDHC_DRV_InstallCallback function to install a callback function for transfer completion event.
+
+            - Following is an example how to transfer the CMD0 command (GO_TO_IDLE)
+            @code
+            usdhc_transfer_t content = {0};     /* Declare a TRANSFER object to send a command or data to the card */
+            usdhc_command_t command = {0};      /* COMMAND object to be transferred */
+
+            command.index = 0;      /* Send CMD0 to the card */
+            content.command = &command;
+            content.data = 0U;      /* Do not sent data */
+            if (STATUS_SUCCESS != uSDHC_DRV_TransferBlocking(uSDHC_INSTANCE, &content))
+            {
+                /* Error occurs */
+            }
+            @endcode
+
+            - Following is an example how to transfer the CMD16 command (SET_BLOCK_LENGTH)
+            @code
+            usdhc_transfer_t content = {0};     /* Declare a TRANSFER object to send a command or data to the card */
+            usdhc_command_t command = {0};      /* COMMAND object to be transferred */
+
+            command.index = 16;      /* Send CMD16 command to the card */
+            command.argument = blockSize;       /* Determine the block size you want to set */
+            command.responseType = uSDHC_RESPONSE_TYPE_R1;      /* Response type corresponding to the CMD16 */
+
+            content.command = &command;
+            content.data = 0U;      /* Do not sent data */
+            if (STATUS_SUCCESS != uSDHC_DRV_TransferBlocking(uSDHC_INSTANCE, &content))
+            {
+                /* Error occurs */
+            }
+            @endcode
+
+            - Following is an example how to write the data to the card.
+            @code
+            /* Define a buffer to store the send data. It must be 4-byte aligned for ADMA2 and 4096-byte aligned for ADMA1 */
+            __attribute__(( aligned(4)))
+            uint8_t buffer[512];
+
+            usdhc_transfer_t content = {0};
+            usdhc_command_t command = {0};
+            usdhc_data_t data = {0};
+
+            /* Wait for the card's buffer to be not full to write to improve the write performance. */
+            while (!(uSDHC_DRV_GetPresentStatusFlags(uSDHC_INSTANCE) & uSDHC_DATA0_LINE_LEVEL))
+            {
+            }
+
+            data.enableAutoCMD12 = true;
+            data.blockSize = 512;   /* This parameter must be same with block size that you set before using CMD16 command */
+            data.blockCount = 1;    /* Send one block */
+            data.txData = (const uint32_t *)buffer;     /* buffer stored the data to write */
+
+            command.index = kSDMMC_WriteSingleBlock;
+            command.argument = startBlock;
+            command.responseType = uSDHC_RESPONSE_TYPE_R1;
+
+            content.command = &command;
+            content.data = &data;
+            if (STATUS_SUCCESS != uSDHC_DRV_TransferBlocking(uSDHC_INSTANCE, &content))
+            {
+                /* Error occurs */
+            }
+            @endcode
+        6. De-initialization: The uSDHC_DRV_Deinit function is used to deinitialize the uSDHC module.
+@}*/

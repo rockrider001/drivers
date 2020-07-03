@@ -1,0 +1,71 @@
+/*!
+ * @defgroup adc_sar_driver ADC SAR Driver
+ * @ingroup adc
+ * @brief Analog to Digital Converter Peripheral Driver.
+ *
+ * The SAR ADC is a configurable single-ended SAR converter, with resolution of up to 12 bits.
+ *
+ * Features of the ADC include:
+ *    - Up to 96 channels (depending on the device variant and instance)
+ *    - Maximum speed: 1 Mega samples/second at 80 MHz
+ *    - 3 operating modes: Normal, Injected and Triggering unit(CTU/BCTU)
+ *    - Separate sampling time register for each available range of channels: precision, internal, external(please check the reference manual 
+ *      to see the channels ID range for every device/instance)
+ *    - Normal mode supports One-Shot/Scan (continuous)
+ *    - Injected mode supports One-Shot
+ *    - Software-initiated calibration
+ *    - DMA support for each channel
+ *
+ * ## Driver consideration ##
+ * The ADC Driver provides access to all features, but not all need to be
+ * configured to use the ADC.
+ * The user application can use the default for most settings, changing only
+ * what is necessary.
+ *
+ * The Driver uses 2 main structures for configuration. There is a ADC converter configuration structure\b
+ * and a \b chain configuration structure. Use ADC_DRV_GetDefaultConfig() to initialize ADC converter configuration
+ * structure and then update only the members which are of interest for the user.
+ *
+ * ## Interrupt handling ##
+ * The ADC Driver in S32 SDK does not use interrupts internally. These can be
+ * defined by the user application.
+ * There are two ways to add an ADC interrupt:
+ *  1. Using the weak symbols defined by start-up code. If the methods
+ *      <tt>ADC<b>x</b>_<b>y</b>_Handler(void)</tt> (x denotes instance number, y - the type of handler EOC/ER/WD)
+ *      are not defined, the linker uses a default ISR. An error will be generated if
+ *      methods with the same name are defined multiple times. This method works
+ *      regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM (S32 SDK behavior).
+ *
+ * ## Clocking and pin configuration ##
+ * The ADC Driver does not handle clock setup(done by Clock Manager) or any kind of pin
+ * configuration (done by PinSettings module).The driver assumes that correct clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\src\adc_sar\adc_sar_driver.c
+ * \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\inc\
+ * \endverbatim
+ *
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ * \ref clock_manager
+ *
+ */

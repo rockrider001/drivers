@@ -1,0 +1,219 @@
+/*!
+ * @defgroup etimer_drv ETIMER Driver
+ * @ingroup etimer
+ * @brief Enhanced Motor Control Timer Peripheral Driver.
+ *
+ * ## Hardware background ##
+ * An eTimer module provides:
+ *    - Six identical counter/timer channels
+ *    - On MPC574xP and S32S247TV devices, one watchdog timer function for peripheral 0 only
+ * Each 16-bit counter/timer channel contains a prescaler, a counter, a load register, a hold
+ * register, two queued capture registers, two compare registers, two compare preload
+ * registers, and four control registers.
+ * Note
+ * This document uses the terms "Timer" and "Counter"
+ * interchangeably because the counter/timers may perform either
+ * or both tasks.
+ * The Load register provides the initialization value to the counter when the counter's
+ * terminal value has been reached. For true modulo counting the counter can also be
+ * initialized by the CMPLD1 or CMPLD2 registers.
+ * 
+ * The Hold register captures the counter's value when other counters are being read. This
+ * feature supports the reading of cascaded counters coherently.
+ * The Capture registers enable an external signal to take a "snap shot" of the counter's
+ * current value.
+ * The COMP1 and COMP2 registers provide the values to which the counter is compared.
+ * If a match occurs, the OFLAG signal can be set, cleared, or toggled. At match time, an
+ * interrupt is generated if enabled, and the new compare value is loaded into the COMP1 or
+ * COMP2 registers from CMPLD1 and CMPLD2 if enabled.
+ * The Prescaler provides different time bases useful for clocking the counter/timer.
+ * The Counter provides the ability to count internal or external events.
+ * Within the eTimer module, the input pins are shareable.
+ *  
+ * Each ETIMER timer channel require at least three members in the configuration structure to be set to a proper value.
+ * These mebmbers are <i>"timerMode"</i> and <i>"coreSettings"</i> and <i>"primaryInput"</i>.
+ * All other members will be ignored or used depending on the combination of the set values in <i>"timerMode"</i> and <i>"coreSettings"</i>.
+ * 
+ * <b><i>"timerMode"</i></b> will configure in which mode the driver will run:@n
+ * - <b>Stop mode</b>: In this mode the counter will be stopped, even if we configure other values.@n
+ * - <b>Periodic Counter</b>: In this mode, the driver will configure the counter to run as a standard 16-bit periodic counter.@n
+ * - <b>One Shot Counter</b>: In this mode, the counter will stop when it reaches the maximum value of 0xffff, if counting up,
+ * or 0 if counting down.@n
+ * - <b>Pulse Output</b>: In this mode, a series of pulses will be generated on the channel output pin.@n
+ * - <b>PWM Output</b>: In this mode, a fixed frequency PWM will be available on the channel output pin.@n
+ * - <b>VPWM Output</b>: In this mode, a variable frequency PWM signal will be available on the channel output pin.@n
+ * - <b>Modulo Counter</b>: In this mode, you can change the maximum counting value to any number between 0 and 0xffff.@n
+ * - <b>Input Capture</b>: In this mode, the counter value will be stored in the corresponding capture registers when
+ * an configurable input condition is met.@n
+ * - <b>Input Capture One Shot</b>: Same as bove mode but will stop after both compare registers have a value stored in them.@n
+ * - <b>Output Compare</b>: In this mode, a signal will be available on the output pin, according to the settings given by the user.@n
+ * - <b>Output Compare One Shot</b>: Same as above mode but will stop when the counter reaches the maximum value of 0xffff, if counting up,
+ * or 0 if counting down.@n
+ * - <b>Fast Cascade</b>: In this mode, two channels can be cascaded using a fast hardware connection which bypasses the usual input muxer.
+ * This mode is limited to two counters per ETIMER peripheral !@n
+ * 
+ * <b><i>"coreSettings"</i></b> will configure in which mode the internal hardware counter will run:@n
+ * - <b>Normal</b>: In this mode the counter will use the primary input as clock source and will ignore the secondary input.@n
+ * - <b>Both Edge</b>: Similar to "Normal" mode, but it will use both clock edged for counting.@n
+ * - <b>Gated</b>: In this mode, the counter will use the primary input as clock source and use the secondary input as start/stop signal,
+ * it will count as long as the secondary input is active.@n
+ * - <b>Quadrature</b>: In this mode the counter will use both the primary input and the secondary input as clock source.
+ * The clock must be quadrature encoded, counter direction will be established by the clock.@n
+ * - <b>Signed</b>: In this mode the counter will use the primary input as clock source and the secondary input as counter direction.@n
+ * - <b>Triggered</b>: In this mode the counter will use the primary input as clock source and will wait for the secondary input to change
+ * state according to the configuration.
+ *
+ * ## Driver consideration ##
+ * The Driver uses structures for configuration. Each structure contains members that are specific to its respective functionality.
+ * 
+ * These structures are:
+ * - \b etimer_user_channel_config_t : configuration for one channel of the ETIMER instance.@n
+ * - \b etimer_dma_channel_t : configures the behavior of a DMA channel available in the ETIMER instance.
+ *
+ * ## Interrupt handling ##
+ * Each ETIMER timer channel has a corresponding interrupt handler. The ETIMER Driver does not define interrupt handler internally.
+ * These interrupt handler methods can be defined by the user application.
+ * There are two ways to add an ETIMER interrupt handler:
+ *  1. Using the weak symbols defined by start-up code. if the methods
+ *      <tt>ETIMER<b>x</b>_Handler(void)</tt> (x denotes instance number) are not
+ *      defined, the linker use a default ISR. An error will be generated if
+ *      methods with the same name are defined multiple times. This method works
+ *      regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM.
+ *
+ * ## Clocking configuration ##
+ * The ETIMER Driver does not handle clock setup (from PCC) configuration. This is handled by the Clock Manager. The driver assumes that clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ *
+ * ## Basic operations ##
+ * 1. Pre-Initialization information of ETIMER module
+ *   - Before using the ETIMER driver, the protocol clock of the module must be configured by the application using PCC
+ *     module.
+ *   - Configures Trigger MUX Control (TRGMUX) if want to use external trigger for ETIMER module.
+ *   - Configures different peripherals if want to use them in ETIMER interrupt routine.
+ *   - Provides configuration data structure to ETIMER initialization API.
+
+ * 2. To initialize the ETIMER module, just call the ETIMER_DRV_Init() function.
+ *     This function configures and enables the ETIMER module operation. This function must be called first.@n
+ *     In the following code, ETIMER module is initialized.
+  ~~~~~{.c~}?
+*  #~{define~}B~{OARD_ETIMER_INSTANCE~}0?
+*  /~{!!Initiali~}?~{!!th!!ETIMER~}m~{odule.~}*?
+*  E~{TIMER_DRV_Init(BOARD_ETIMER_INSTANCE);~}
+ ???
+*
+*3~{!!Afte!!callin!!th!!ETIMER_DRV_Init(!!function!!call~}E~{TIMER_DRV_InitChannel(!!function~}w~{it!!user~}c~{hannel~}c~{onfiguration~}
+*  s~{tructure~}t~{!!initiali~}?t~{imer~}c~{hannel.@~}?
+*  T~{hi!!function~}c~{onfigure!!time!!channe!!chaining!!time!!channe!!mode!!time!!channe!!counte!!mode!!interrup!!generation~}?
+*  p~{rimary~}i~{nput~}s~{ource,~}s~{econdary~}i~{nput~}s~{ource,~}o~{utpu!!compar!!an!!inpu!!captur!!options.~}
+*  I~{!!th!!followin!!code!!time!!channe!!is~}i~{nitialized~}w~{it!!interrup!!generation~}o~{!!time!!overflow~}i~{!!enabled,~}
+*  o~{peration~}m~{od!!is~}f~{ixed~}f~{requency~}g~{eneratio!!PWM,~}h~{ardwar!!counte!!is~}s~{et~}t~{!!normal~}m~{od!!(up/down~}c~{ounting,~}
+*  u~{se~}p~{rimary~}i~{nput~}a~{!!cloc!!source),~}p~{rimary~}i~{nput~}s~{et~}t~{!!peripheral~}c~{lock~}d~{ivided~}b~{!!4,~}o~{utpu!!pi!!enabled,~}P~{WM~}f~{acto~}?
+*  i~{!!se!!with~}c~{ompareValues~}m~{embe!!to~}a~{bout~}3~{!!percent.~}N~{ot!!that~}i~{!!PW!!mode~}w~{!!only~}r~{equire~}t~{hese~}s~{ettings,~}a~{ll~}o~{ther~}?
+*  a~{re~}n~{ot~}u~{se!!an!!ar!!here~}j~{us!!to~}s~{et~}ak~{nown~}v~{alue~}?
+ ??~{.c~}?
+*  /~{!!Channe!!!!configuratio!!structur!!*/~}
+*  e~{timer_user_channel_config_!!chnlconfig~}=
+*  {
+*    .~{timerMode=ETIMER_MODE_FIXED_PWM,~}
+*    .~{coreSettings=ETIMER_COUNTER_NORMAL~}?
+*    .~{primar~}?~{nput~}?
+*    {
+*      E~{TIMER_IN_SRC_CLK_DIV_4~}?
+*      E~{TIMER_POLARITY_POSITIVE,~}
+*    }?
+*    .~{secondar~}?~{nput~}?
+*    {
+*      E~{TIMER_IN_SRC_CNT1_IN~}?
+*      E~{TIMER_POLARITY_NEGATIVE,~}
+*    }?
+*    .~{inputFilter=~}
+*    {
+*      E~{TIMER_FILT_CNT_3~}?
+*      0?
+*    }?
+*    .~{outputPin=~}
+*    {
+*      t~{rue,~}
+*      E~{TIMER_POLARITY_POSITIVE,~}
+*    }?
+*    .~{compareLoading~}?
+*    {
+*      E~{TIMER_CLC_FROM_CMPLD1_WHEN_COMP1~}?
+*      E~{TIMER_CLC_FROM_CMPLD2_WHEN_COMP2~}?
+*    }?
+*    .~{compareValues=~}
+*    {
+*      0?~{000,~}
+		    ~{0xffff~}?
+*    }?
+*    .~{countDirection=ETIMER_COUNT_UP~}?
+*    .~{compareOutputControl=ETIMER_OUTMODE_SOFTWARE~}?
+*    .~{compareMode=ETIMER_CMPMODE_COMP1_UP_COMP2_UP~}?
+*    .~{captureControl~}
+*    {
+*      E~{TIMER_CPTMODE_DISABLED~}?
+*      E~{TIMER_CPTMODE_DISABLED~}?
+*    }
+*    .~{captureWords=0~}?
+*    .~{interruptEnableMask=ETIMER_CH_IRQ_SOURCE_TOFIE~}?
+*  }?
+*  /~{!!Initiali~}?~{!!th!!channe!!!!*/~}
+*  E~{TIMER_DRV_InitChannel(BOARD_ETIMER_INSTANCE,~}0~{!!&chnlconfig)~}?
+ ???
+*
+*4~{!!To~}s~{tart~}t~{imer~}c~{hannel~}c~{ounting,~}j~{us!!call~}E~{TIMER_DRV_StartTimerChannels()~}w~{it!!time!!channels~}s~{tartin!!mask~}?
+*  I~{!!th!!followin!!code!!th!!time!!channe!!!!is~}s~{tarted~}w~{it!!th!!mask~}o~{!!ETIMER_ENABLE_CH0.~}
+ ??~{.c~}?
+*  /~{!!Starts~}c~{hannel~}0c~{ounting*~}?
+*  E~{TIMER_DRV_StartTimerChannels(BOARD_ETIMER_INSTANCE!!ETIMER_ENABLE_CH0)~}?
+ ???
+*
+*5~{!!To~}s~{to!!time!!channe!!counting!!just~}c~{al!!ETIMER_DRV_StopTimerChannels()~}w~{it!!time!!channels~}s~{toppin!!mask~}?
+*  I~{!!th!!followin!!code!!th!!time!!channe!!!!is~}s~{topped~}w~{it!!th!!mask~}o~{!!ETIMER_ENABLE_CH0.~}
+ ??~{.c~}?
+*  /~{!!Stop!!channe!!!!counting*/~}
+*  E~{TIMER_DRV_StopTimerChannels(BOARD_ETIMER_INSTANCE,~}E~{TIMER_ENABLE_CH0);~}
+ ???
+*
+*6~{!!To~}d~{isable~}E~{TIME!!module!!just~}c~{al!!ETIMER_DRV_Deinit().~}
+ ??~{.c~}?
+*  /~{!!Disables~}E~{TIME!!module*/~}
+*  E~{TIMER_DRV_Deinit(BOARD_ETIMER_INSTANCE);~}
+ ???
+*
+*
+*#~{!!Integratio!!guidelin!!##~}
+*
+*#~{##~}C~{ompilation~}u~{nits~}#~{##~}
+*
+*T~{he~}f~{ollowing~}f~{iles~}n~{ee!!to~}b~{!!compiled~}i~{!!th!!project:~}
+*\~{verbatim~}
+$?~{32SDK_PATH~}?~{platform\drivers\src\etimer\etimer_driver.~}?
+$?~{32SDK_PATH~}?~{platform\drivers\src\etimer\etimer_hw_access.c~}
+\~{endverbati~}?
+*
+*#~{##~}I~{nclude~}p~{at!!##~}?
+*
+*T~{he~}f~{ollowing~}p~{aths~}n~{ee!!to~}b~{!!adde!!to~}t~{he~}i~{nclude~}p~{at!!of~}t~{he~}t~{oolchain~}?
+*\~{verbatim~}
+$?~{32SDK_PATH~}?~{platform\drivers\inc~}?
+\~{endverbati~}?
+*
+*#~{##~}P~{reprocesso!!symbol!!##~}?
+*
+*N~{!!specia!!symbol!!ar!!required~}f~{or~}t~{hi!!componen~}?
+*
+*#~{##~}D~{ependencie!!##~}?
+\~{re!!clock_manage!!\n~}
+\~{re!!interrupt_manage!!\n~}
+*
+*#~{!!Know!!limitations:~}#?
+*T~{he~}f~{ollowing~}i~{!!!!non-exhaustive~}l~{is!!of~}k~{no!!limitation!!in~}t~{he~}c~{urrent~}i~{mplementation:@n~}
+*-"~{countDirection!!valu!!is~}i~{gnored~}w~{he!!"coreSettings"~}i~{!!se!!to~}"~{ETIMER_COUNTER_SIGNED"!!@n~}
+*-u~{sing~}a~{ny~}o~{!!th!!one-shot~}m~{odes~}w~{il!!stop~}t~{he~}h~{ardwar!!channe!!afte!!th!!even!!occurs!!to~}r~{eset~}i~{nitializ!!an!!then~}s~{tart~}t~{he~}c~{hannel!!~}
+*?
+*

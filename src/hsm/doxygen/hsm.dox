@@ -1,0 +1,120 @@
+/**
+@defgroup hsm Hardware Security Module (HSM)
+@brief The S32 SDK provides a host Peripheral Driver interfacing with the Hardware Security Module (HSM).
+
+<p>
+    The HSM implements security features to comply with the SHE specification. By
+    using an embedded processor, firmware and hardware assisted AES-128 sub-block,
+    the HSM enables encryption, decryption and message authentication algorithms for 
+    secure applications. Additionally a TRNG enables true random number generation 
+    (entropy generator for PRNG in AES sub-block).
+</p>
+## Hardware background ##
+<p>
+    Features of the HSM module include:
+        - Secure cryptographic key storage (up to 20 user keys)
+        - AES-128 encryption and decryption
+        - AES-128 CMAC (Cipher-based Message Authentication Code) calculation and authentication
+        - ECB (Electronic Cypher Book) Mode - encryption and decryption
+        - CBC (Cipher Block Chaining) Mode - encryption and decryption
+        - True and Pseudo random number generation
+</p>
+*/
+
+/**
+@defgroup hsm_driver HSM Driver
+@ingroup hsm
+
+## How to use the HSM driver in your application ##
+<p>
+    <b>It is mandatory to have the HSM security firmware written to the flash memory of the MCU.</b>
+</p>
+<p>
+    The HSM driver is designated to be used in conjunction with the HSM security firmware. The driver
+    implements the host interface, running on the application cores, and assumes the firmware
+    has been written to flash memory and HSM module has been enabled through the DCF entries.
+    The driver sends commands to the HSM, as specified in the security firmware block guide, and
+    retrieves the results in a synchronous way (using synchronization semaphores updated in the
+    HSM command complete ISR). For encryption/decryption and MAC generation/verification, the
+    HSM driver also offers asynchronous API - in this case, the functions return right after sending
+    the command to the HSM firmware; the result of the asynchronous commands can be retrieved by
+    calling <b>HSM_DRV_GetAsyncCmdStatus</b> function.
+</p>
+<p>
+    In order to use the HSM driver in your application, the <b>HSM_DRV_Init</b> function
+    should be called prior to using the rest of the API. The parameter of this function
+    is used for holding the internal state of the driver throughout the lifetime of the
+    application.
+</p>
+## Key/seed/random number generation ##
+<p>
+    This is the high level flow in which to initialize and generate random numbers.
+    1. Run <b>HSM_DRV_InitRNG</b> to initialize a random seed from the internal TRNG
+        - <b>HSM_DRV_InitRNG</b> must be run after every POR, and
+        before the first execution of HSM_DRV_GenerateRND
+    2. Run <b>HSM_DRV_GenerateRND</b> to generate a random number
+    The PRNG uses the PRNG_STATE/KEY and Seed per SHE spec and the AIS20
+    standard.
+    3. For additional random numbers the user may continue executing <b>HSM_DRV_GenerateRND</b> unless
+    a POR event occurred.
+</p>
+## Memory update protocol ##
+<p>
+    In order to update a key, the user must have knowledge of a valid authentication secret,
+    i.e. another key (AuthID). If the key AuthID is empty, the key update will only work if
+    AuthID = ID (the key that will be updated will represent the AuthID from now on), otherwise
+    <b>STATUS_SEC_KEY_EMPTY</b> is returned.
+    </p>
+    The M1-M3 values need to be computed according to the SHE Specification in order to update a
+    key slot; in order to obtain the M1-M3 values, the driver offers a software implementation of the
+    Miyaguchi-Preneel compression. The <b>HSM_DRV_LoadKey</b> function will require those values. 
+    After successfully updating the key slot, two verification values will be returned: M4 and M5.
+    The user can compute the two values and compare them with the ones returned by the 
+    <b>HSM_DRV_LoadKey</b> function in order to ensure the slot was updated as desired.
+</p>
+<p>
+    In order to update the RAM key slot, <b>HSM_DRV_LoadPlainKey</b> function can be used, taking a reference
+    to the plaintext key as parameter. This key can later be used for encryption or MAC algorithms,
+    but needs to be updated after each reset cycle.
+</p>
+## Encryption/Decryption ##
+<p>
+    The driver supports symmetrical crypto algorithms (AES ECB/CBC). The ID of the key to be used must be 
+    provided as parameter to the dedicated functions; the application must make sure the appropriate keys
+    had been loaded prior to calling encryption/decryption functions, otherwise an error is returned.
+    For AES-ECB, <b>HSM_DRV_EncryptECB</b> and <b>HSM_DRV_DecryptECB</b> functions take the key ID and 
+    references to the plaintext and ciphertext buffers as parameters. Additionally, for CBC mode, 
+    <b>HSM_DRV_EncryptCBC</b> and <b>HSM_DRV_DecryptCBC</b> also require a reference to the initialization
+    vector.
+</p>
+## MAC generation/verification ##
+<p>
+<b>HSM_DRV_GenerateMAC</b> function can be used for computing the MAC over any number of bits for
+    a given message, as supported by the security firmware. <b>HSM_DRV_VerifyMAC</b> function checks whether
+    the MAC received as parameter is valid for a given message, updating the boolean output parameter 
+    <b>verifStatus</b> accordingly.
+</p>
+## Important Notes ##
+<p>
+    All the functions mentioned in the previous two sections require a timeout parameter; in case the
+    encryption/decryption/MAC generation/MAC verification takes longer than the number of ms specified,
+    a timeout error is returned. As per SHE specification, <i>the latency of the AES must remain below 2us 
+    per encryption/decryption of a single block, including the key schedule</i> - depending on the number of
+    blocks to be processed by the command, the timeout parameter should be computed considering this 
+    maximum period for a block.
+</p>
+<p>
+    The mentioned synchronous functions also have an asynchronous equivalent, which returns right after the command
+    is issued; it is then the responsibility of the application to poll the command status (the result of
+    the crypto operation is valid only upon command completion).
+</p>
+<p>
+    For the other functions in the driver API, the timeout parameter is used only as a fallback mechanism,
+    in case the HSM status bits are not updated (to avoid infinite loops in code). In a normal flow, no
+    function besides <b>HSM_DRV_EncryptECB</b>, <b>HSM_DRV_DecryptECB</b>, <b>HSM_DRV_EncryptCBC</b>,
+    <b>HSM_DRV_DecryptCBC</b>, <b>HSM_DRV_GenerateMAC</b> and <b>HSM_DRV_VerifyMAC</b> will return
+    <b>STATUS_TIMEOUT</b>, thus it is safe to provide the minimum timeout period of 1ms.</br>
+    \note A value of 0 should never be passed for the timeout parameter, as it may result in unexpected
+    behaviour (depending on the clocking setup, the functions may still return success).
+</p>
+*/

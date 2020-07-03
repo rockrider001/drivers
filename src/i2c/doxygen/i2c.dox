@@ -1,0 +1,26 @@
+/** 
+@defgroup i2c Inter-Integrated Circuit (I2C)
+
+<p>
+  The I2C module provides a simple and efficient method of data exchange between a chip and other devices, such as microcontrollers, 
+  EEPROM, real-time clock devices, analog-to-digital converters and LCDs.
+
+  # Features #
+  - Operating speeds up to 100 kbps in Standard Mode and up to 400 kbps in Fast Mode 
+  - Multi-master operation
+  - Software programmable for one of 256 different serial clock frequencies
+  - Software selectable acknowledge bit
+  - Interrupt driven byte-by-byte data transfer
+  - Calling address identification interrupt
+  - Arbitration lost interrupt with automatic mode switching from master to slave
+  - Start and stop signal generation/detection
+  - Repeated start signal generation
+  - Acknowledge bit generation/detection
+  - Bus busy detection
+  - Basic DMA interface
+
+  The advantages of the I2C bus is that it minimizes interconnections between devices, allows the connection of additional devices to the bus, 
+  includes collision detection and arbitration that prevent data corruption and it doesn't require an external address decoder.
+</p>
+   
+*/

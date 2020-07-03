@@ -1,0 +1,14 @@
+/** 
+@defgroup clock_manager_MPC57xx Clock Manager Driver
+@brief This module covers the device-specific clock_manager functionality implemented for MPC57xx SOC.
+@ingroup clock_manager
+<p>
+The support for MPC57xx consist in the following items:
+-# Clock names enumeration
+\ref clock_names_t is an enumeration which contains all clock names which are relevant for MPC57xx.
+-# Submodule configuration structures
+    - \ref mc_me_config_t
+    - \ref cgm_config_t
+    - \ref cgmcs_config_t
+</p>
+*/

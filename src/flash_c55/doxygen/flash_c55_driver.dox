@@ -1,0 +1,283 @@
+/*!
+@defgroup flash_c55 Flash C55 Memory (C55FMC)
+@brief Flash Memory Module provides the general flash APIs
+@details
+Flash memory is ideal for single-supply applications, permitting in-the-field erase and
+reprogramming operations without the need for any external high voltage power sources.
+The flash module includes a memory controller that executes commands to modify flash
+memory contents. An erased bit reads '1' and a programmed bit reads '0'. The
+programming operation is unidirectional; it can only move bits from the '1' state (erased)
+to the '0' state (programmed). Only the erase operation restores bits from '0' to '1'; bits
+cannot be programmed from a '0' to a '1'.
+
+## Flash C55 Driver
+The flash c55 is a set of APIs that enables user application to operate on the flash module embedded
+on a micro-controller. The flash c55 contains a set of functions to program/erase a single flash module.
+
+The flash c55 driver has APIs to handle the erase, program, erase verify and program verify operations
+on the flash. It also provides the feature for locking specific blocks and calculating check sum.
+This flash driver also provides four User Test APIs for checking the Array Integrity
+and do user margin read check as well as do suspend/resume those operations. <b>#FLASH_DRV_Erase</b>,
+<b>#FLASH_DRV_Program</b> and <b>#FLASH_DRV_ArrayIntegrityCheck</b> functions will work as asynchronous model
+for concurrency event support by invoking <b>#FLASH_DRV_CheckEraseStatus</b>, <b>#FLASH_DRV_CheckProgramStatus</b>
+and <b>#FLASH_DRV_CheckUserTestStatus</b> function to track the on-going status of targeted operation.
+
+User mode is the default operating mode of the embedded flash memory. In this
+mode, it is possible to read and write registers, read and interlock write the memory
+array, program the memory array, and erase the memory array.
+
+UTest mode is a mode into which customers can put the embedded flash memory so as to
+do specific tests that check the integrity of the embedded flash memory.
+
+This is example code of flash usage sequence:
+
+~~~~~{.c}
+
+/* Lock State */
+#define UNLOCK_LOW_BLOCKS               0x00000000U
+#define UNLOCK_MID_BLOCKS               0x00000000U
+#define UNLOCK_HIGH_BLOCKS              0x00000000U
+#define UNLOCK_FIRST256_BLOCKS          0x00000000U
+#define UNLOCK_SECOND256_BLOCKS         0x00000000U
+
+/* buffer size */
+#define BUFFER_SIZE_BYTE                0x1000U
+
+#define BLOCK_START_ADDRS               0x00FC0000U
+#define BLOCK_END_ADDRS                 0x00FC7FFFU
+
+#define NUMBER_OF_WORD_BLANK_CHECK      0x90
+#define NUMBER_OF_WORD_PGM_VERIFY       0x80
+#define NUMBER_OF_WORD_CHECK_SUM        0x120
+
+uint32_t buffer[BUFFER_SIZE_BYTE / C55_WORD_SIZE];
+flash_context_data_t pCtxData;
+
+int main(void)
+{
+    status_t ret = STATUS_SUCCESS;
+    uint32_t blkLockState;              /* block lock status to be retrieved */
+    flash_block_select_t blockSelect;   /* select the address space */
+    flash_state_t opResult;             /* store the state of flash */
+    uint32_t numOfWordCycle;            /* the number of word for a cycle to run CallBack function */
+    uint32_t dest;                      /* destination address */
+    uint32_t size;                      /* size applicable */
+    uint32_t source;                    /* source address for program and verify */
+    uint32_t failedAddress;             /* save the failed address in flash */
+    UINT32 sum;                         /* check sum result */
+    uint32_t i;                         /* Index */
+
+    /**************************************************************************/
+    /* Initialize source buffer                                               */
+    /**************************************************************************/
+    for (i = 0; i < (BUFFER_SIZE_BYTE / C55_WORD_SIZE); i++)
+    {
+        buffer[i] = i;
+    }
+
+    /* Flash Initialization */
+    ret = FLASH_DRV_Init();
+
+    /**************************************************************************/
+    /* Lock to protect UTest address space                                    */
+    /**************************************************************************/
+    ret = FLASH_DRV_GetLock(C55_BLOCK_UTEST, &blkLockState);
+
+    if (!(blkLockState & 0x00000001U))
+    {
+        ret = FLASH_DRV_SetLock(C55_BLOCK_UTEST, 0x1U);
+        if (STATUS_SUCCESS != ret)
+        {
+            return ret;
+        }
+    }
+
+    /**************************************************************************/
+    /* Unlock all blocks in low address space                                 */
+    /**************************************************************************/
+    ret = FLASH_DRV_SetLock(C55_BLOCK_LOW, UNLOCK_LOW_BLOCKS);
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    /**************************************************************************/
+    /* Unlock all blocks in mid address space                                 */
+    /**************************************************************************/
+    ret = FLASH_DRV_SetLock(C55_BLOCK_MID, UNLOCK_MID_BLOCKS);
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    /**************************************************************************/
+    /* Unlock all blocks in high address space                                */
+    /**************************************************************************/
+    ret = FLASH_DRV_SetLock(C55_BLOCK_HIGH, UNLOCK_HIGH_BLOCKS);
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    /**************************************************************************/
+    /* Unlock all blocks in 256K blocks                                       */
+    /**************************************************************************/
+    ret = FLASH_DRV_SetLock(C55_BLOCK_256K_FIRST, UNLOCK_FIRST256_BLOCKS);
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    ret = FLASH_DRV_SetLock(C55_BLOCK_256K_SECOND, UNLOCK_SECOND256_BLOCKS);
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    /**************************************************************************/
+    /* Call FLASH_DRV_Erase, FLASH_DRV_BlankCheck, FLASH_DRV_Program,         */
+    /* FLASH_DRV_ProgramVerify, FLASH_DRV_CheckSum functions                  */
+    /**************************************************************************/
+    blockSelect.lowBlockSelect = 0x4U;
+    blockSelect.midBlockSelect = 0x0U;
+    blockSelect.highBlockSelect = 0x0U;
+    blockSelect.first256KBlockSelect = 0U;
+    blockSelect.second256KBlockSelect = 0U;
+    /* erase block */
+    ret = FLASH_DRV_Erase(ERS_OPT_MAIN_SPACE, &blockSelect);
+
+    if (STATUS_SUCCESS == ret)
+    {
+        do
+        {
+            /* The user can do any tasks while check status function is still in progress */
+            UserCallBack();
+            ret = FLASH_DRV_CheckEraseStatus(&opResult);
+        }while(ret == STATUS_FLASH_INPROGRESS);
+    }
+
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    dest = BLOCK_START_ADDRS;
+    size = BLOCK_END_ADDRS + 1 - BLOCK_START_ADDRS;
+    numOfWordCycle = NUMBER_OF_WORD_BLANK_CHECK;
+    /* blank check */
+    ret = FLASH_DRV_BlankCheck(dest,
+                               size,
+                               numOfWordCycle,
+                               &failedAddress,
+                               NULL_CALLBACK);
+
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    /* program to beginning of block */
+    dest = BLOCK_START_ADDRS;
+    size = BUFFER_SIZE_BYTE;
+    source = (uint32_t)buffer;
+    ret = FLASH_DRV_Program(&pCtxData,
+                            dest,
+                            size,
+                            source);
+
+    if (STATUS_SUCCESS == ret)
+    {
+        do
+        {
+            /* The user can do any tasks while check status function is still in progress */
+            UserCallBack();
+            ret = FLASH_DRV_CheckProgramStatus(&pCtxData, &opResult);
+        }while(ret == STATUS_FLASH_INPROGRESS);
+    }
+
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    numOfWordCycle = NUMBER_OF_WORD_PGM_VERIFY;
+    /* Program verify */
+    ret = FLASH_DRV_ProgramVerify(dest,
+                                  size,
+                                  source,
+                                  numOfWordCycle,
+                                  &failedAddress,
+                                  NULL_CALLBACK);
+
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    numOfWordCycle = NUMBER_OF_WORD_CHECK_SUM;
+    /* Check sum */
+    ret = FLASH_DRV_CheckSum(dest,
+                             size,
+                             numOfWordCycle,
+                             &sum,
+                             NULL_CALLBACK);
+
+    if (STATUS_SUCCESS != ret)
+    {
+        return ret;
+    }
+
+    while(1)
+    {
+        /* do nothing */
+    }
+}
+~~~~~
+
+## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\flash_c55\flash_c55_driver.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+No special dependencies are required for this component
+
+## Important Note
+1. Ensure the block that contains the address to be programmed/erased is unlocked.
+2. In the main interface, the flash block must be initialized using a <b>#FLASH_DRV_Init</b> API.
+3. The user’s application code should call <b>#FLASH_DRV_CheckProgramStatus</b>, <b>#FLASH_DRV_CheckEraseStatus</b>,
+<b>#FLASH_DRV_CheckUserTestStatus</b> functions to determine whether the operation is done or failed or in progress.
+4. The flash memory is not accessible for read, write, program, or erase when in low power mode.
+5. The destination address parameter for FLASH_DRV_Program(), FLASH_DRV_ProgramVerify(), FLASH_DRV_CheckSum(), FLASH_DRV_BlankCheck() should be aligned to 8 bytes.
+6. Interrupts should be disabled before calling flash driver functions, and re-enabled after. Because the interrupts may effect the erase, program process.
+7. Apply only S32R, MPC5777C: The breakpoints may skip addresses for RWSC and APC (in the Platform Flash Configuration register 'PFLASH_PFCR1') combinations with following condition:
+RWSC = 1 and APC = 1
+RWSC = 3 and APC = 2
+RWSC = 5 and APC = 3
+Need to make sure the RWSC and APC combinations with difference table values or do so without enabling breakpoints while use flash_c55 module.
+8. Rapid Program or Erase Suspend fail status. If a flash suspend operation occurs during a 5us window while a verify operation being
+executed by the internal flash program and erase state machine, and the suspend rate continues at a consistent 20us rate after that.
+It is possible that the flash will not exit the program or erase operation. A single suspend during a single program or erase event will not
+cause this issue to occur. 
+Workaround: User ensure the suspend period is greater than 20us when doing repeat suspends during program or erase.
+9. Apply only S32R, MPC5777C: The false AEE event occurs duting flash read while write operations(RWW). This one occur to partitions in the Low,Mid or High address spaces and
+the RWW occure both in even RWW partitions (i.e. 0, 2 or 4) or odd RWW partitions (i.e. 1, 3 or 5).
+Workaround: Disable the FCCU channel 31 and 32. It disables the AEE fault notification in the FCCU, the flash module configuration register may be monitored the AEE bit field.
+
+@}*/

@@ -1,0 +1,108 @@
+/**
+@defgroup igf input glitch filter - Peripheral Abstraction Layer (IGF)
+@brief The S32 SDK provides a Peripheral Abstraction Layer for the input glitch filter of C55 SDK devices.
+
+## Hardware background ##
+
+Input glitch filter (IGF) only supports the MPC5777C. The IGF provides programmable
+glitch rejection filtering of digital input signals.The IGF modules mediate between
+some pins and the eMIOS and eTPU modules.
+
+
+## Driver consideration ##
+
+IGF driver will enable IGF output and allows the signals from the pins to eMIOS and eTPU modules.
+This one also allows filter the input signal which are affected by envirenmental noise or glitches.
+
+## Example ##
+@code
+
+/*! @brief Device instance number */
+#define INST_IGF1 (0U)
+#define IGF_EMIOS_CHANNEL_0 (16U)
+uint32_t newFallingValue = 2000U;
+uint32_t newRisingValue = 1000U;
+/*! @brief Channel configuration array */
+igf_ch_param_t channelConfigArrName[2] =
+{
+    /* Channel configuration 0 */
+    {
+         .channel = 0U, /*!< The Id of channel */
+         .allowDebugMode = false, /*!< Allow all channel in eMIOS group can enter debug mode */
+         .invertOutput = false, /*!< Output polarity bit allow inverted or not inverted output */
+         .internalPrescaler = 0, /*!< Value filter prescaler defines the rate of the filter internal counter */
+         .filterModeFallingEdge = FILTER_BY_PASS, /*!< Filter Mode of channel with falling edge */
+         .filterModeRisingEdge = FILTER_BY_PASS, /*!< Filter Mode of channel with rising edge */
+         .fallingEdgeThreshold = 0, /*!< The falling edge threshold value when a falling edge occurs is being filtered */
+         .risingEdgeThreshold = 0 /*!< The rising edge threshold value when a rising edge occurs is being filtered */
+    },
+    /* Channel configuration 1 */
+    {
+         .channel = 18U, /*!< The Id of channel */
+         .allowDebugMode = false, /*!< Allow all channel in eMIOS group can enter debug mode */
+         .invertOutput = false, /*!< Output polarity bit allow inverted or not inverted output */
+         .internalPrescaler = 0, /*!< Value filter prescaler defines the rate of the filter internal counter */
+         .filterModeFallingEdge = FILTER_BY_PASS, /*!< Filter Mode of channel with falling edge */
+         .filterModeRisingEdge = FILTER_WINDOWING, /*!< Filter Mode of channel with rising edge */
+         .fallingEdgeThreshold = 0, /*!< The falling edge threshold value when a falling edge occurs is being filtered */
+         .risingEdgeThreshold = 5000 /*!< The rising edge threshold value when a rising edge occurs is being filtered */
+    },
+};
+/*! @brief input glitch filter configuration */
+igf_config_t igf1_InitConfig =
+{
+    .configsNumber = 2U, /*!< The number of channel configurations */
+    .igfChConfig = channelConfigArrName /*!< The array channel configurations */
+};
+
+/* Initialize and configure input glitch filter(IGF)
+* Enables IGF_0 channel 16 to mapping signal from pad to EMIOS0_0
+* Enables IGF_0 channel 0 to select internal prescaler for instance 0
+*/
+if (STATUS_SUCCESS != IGF_DRV_Init(INST_IGF1, &igf1_InitConfig)
+{
+   ...
+}
+else
+{
+   ...
+}
+/* Update the new falling threshold value for channel 0 */
+IGF_DRV_SetFallingThreshold(INST_IGF1, newFallingValue);
+
+/* Update the new rising threshold value for channel 16 */
+IGF_DRV_SetRisingThreshold(INST_IGF1, IGF_EMIOS_CHANNEL_0, newRisingValue);
+
+@endcode
+## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\igf_driver.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+## Important Note
+1. Each group of channel numbers that is associated with one implemented prescaler is a filter cluster. Every channel between channel 0 to 31 are drived by cluster channel 0. Every channel between 32 to 45 are drived by cluster 32. User need to add channel 0 or channel 32 in the list channel configuration for each group channel.
+Eg: If user selects input glitch filter for IGF_0 channel 16, User must configure channel 16 and channel 0 because IGF_0's channel 0 implements the cluster's internal prescaler.
+2. In the instance IGF_0, the EMIOS0_4 and EMIOS0_5 are not supported because the input channels
+are not connected directly from pads. They are connected from the DSPI_B module.
+In the instance IGF_1, the EMIOS1_6 and EMIOS1_7 are not supported because the input channels
+are not connected directly from pads. They are connected from the DSPI_D module.
+
+*/

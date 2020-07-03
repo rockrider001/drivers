@@ -1,0 +1,407 @@
+/*!
+   @defgroup mcan Modular Controller Area Network
+   The S32 SDK provides a Peripheral Driver for the MCAN module of S32 SDK devices.
+
+   ## Hardware background ##
+
+   The MCAN module is a communication controller implementing the CAN protocol
+   according to the ISO 11898-1 standard and CAN 2.0 B protocol specifications.
+   The MCAN module is a full implementation of the CAN protocol specification, the
+   CAN with Flexible Data rate (CAN FD) protocol and the CAN 2.0 version B protocol,
+   which supports both standard and extended message frames and long payloads up to 64
+   bytes transferred at faster rates up to 8 Mbps. The message buffers are stored in an
+   embedded RAM dedicated to the MCAN modules.
+
+   The MCAN module includes these distinctive features:
+   - Full implementation of the CAN with Flexible Data Rate (CAN FD) protocol
+   specification and CAN protocol specification, Version 2.0 B
+      - Standard data frames
+      - Extended data frames
+      - Zero to sixty four bytes data length
+      - Programmable bit rate (see the chip-specific MCAN information for the
+      specific maximum bit rate configuration)
+      - Content-related addressing
+   - Compliant with the ISO 11898-1 standard
+   - The message buffers configurable to store 0 to 8, 12, 16, 20, 24, 32, 48 or 64 bytes data length
+   - Each message buffer configurable as receive or transmit, all supporting standard and
+   extended messages
+   - Transmission cancellation capability
+   - Flexible message buffers (MBs) configurable up to 64 as Rx or 32 as Tx (see the \ref FEATURE_MCAN_RX_MB_NUM and
+   FEATURE_MCAN_TX_MB_NUM define for the specific maximum number of message buffers configurable on each platform)
+   - Dedicated MessageRAM is equipped with parity or ECC functionality, the ECC Controller provides 
+   Single Error Correction / Double Error Detection
+   - Listen-Only mode capability
+   - Programmable Loop-Back mode supporting self-test operation
+   - Maskable interrupts can be routed either to M_CAN interrupt 0 or to M_CAN interrupt 1
+   - Short latency time due to an arbitration scheme for high-priority messages
+   - Transceiver Delay Compensation feature when transmitting CAN FD messages at faster data rates
+   - up to 128 ID Filters as Standard ID or 64 as Extended ID 
+   - Two configurable Receive FIFOs
+   @addtogroup mcan_driver
+   @ingroup mcan
+
+   ## How to use the MCAN driver in your application ##
+   In order to be able to use the MCAN in your application, the first thing to do is
+   initializing it with the desired configuration. This is done by calling the <b>MCAN_DRV_Init</b>
+   function. One of the arguments passed to this function is the configuration which will be
+   used for the MCAN module, specified by the <b>mcan_user_config_t</b> structure.
+
+   The <b>mcan_user_config_t</b> structure allows you to configure the following:
+      - the number of Rx message buffers needed;
+      - the number of Tx message buffers needed;      
+      - the number of Rx FIFO ID filters needed;
+      - Rx FIFO feature enable/disable;
+      - the operation mode, which can be one of the following:
+         - normal mode;
+         - listen-only mode;
+         - loopback mode;
+         - disable mode;
+      - the payload size of the message buffers:
+         - 8 bytes;
+         - 12 bytes (only available with the FD feature enabled);
+         - 16 bytes (only available with the FD feature enabled);
+         - 20 bytes (only available with the FD feature enabled);
+         - 24 bytes (only available with the FD feature enabled);         
+         - 32 bytes (only available with the FD feature enabled);
+         - 48 bytes (only available with the FD feature enabled);
+         - 64 bytes (only available with the FD feature enabled);
+      - enable/disable the Flexible Data-rate feature;
+      - the bitrate used for standard frames or for the arbitration phase of FD frames;
+      - the bitrate used for the data phase of FD frames;
+      - the Rx FIFOs configurations <b>rxfifo_conf_t<\b>:
+         - Rx FIFO Operation Mode which can be one of the following Blocking or Overwrite Mode ;      
+         - number of Rx FIFO elements;
+         - Rx FIFO watermark level that generate the watermark interrupt;
+      - the ID Filter configurations list based on the number of Rx FIFO ID filters needed <b>mcan_id_table_t<\b>:
+         - filter type;
+         - filter element that will describe the behavior of the filter;
+         - ID filter type Standard\Extended;
+         - ID1 - filter ID;
+         - ID2 - based on filter type have different function.
+
+   The bitrate is represented by a <b>mcan_time_segment_t</b> structure, with the following fields:
+      - propagation segment;
+      - phase segment 1;
+      - phase segment 2;
+      - clock prescaler division factor;
+      - resync jump width.
+
+   Details about these fields can be found in the reference manual.
+
+   In order to use a message buffer for transmission/reception, it should be initialized using either
+   <b>MCAN_DRV_ConfigRxMb</b> or <b>MCAN_DRV_ConfigTxMb</b>.
+
+   After having the message buffer configured, you can start sending/receiving data using the specified
+   message buffer, by calling one of the following functions:
+      - MCAN_DRV_Send;
+      - MCAN_DRV_SendBlocking;
+      - MCAN_DRV_Receive;
+      - MCAN_DRV_ReceiveBlocking;
+
+  The number of elements in the ID filter table is defined by the user:
+  - The Driver will detect the numbers of extended and standard ID filters used for FIFOs and 
+  configure the necessary space needed, but the same space is shared with the Individual MBs filter space, 
+  by allocating the amount of STD and EXT filters equal with number of Dedicated Rx Message Buffers configured.
+  The user must provide the exact number or more ID filter elements (STD\EXT) as number of Rx FIFOs ID filters needed.
+  The driver will correlate the ID filter position with Rx Message Buffer Number. 
+  The filter priority is established by the filter position, be aware that the previous filter IDs 
+  affect the ID wanted to be used as Rx IDs, advice to configure all filters as disabled.
+  The driver by default will initialize the Global filter configuration behavior to reject all frames that don't match
+  and to pass to filters the remote frames; this behavior can be changed to store rejected frames or automatically 
+  reject remote frames by calling <b>MCAN_DRV_SetGlobalFilterConfig<\b>
+ 
+### MCAN Rx FIFO configuration ###
+<p>
+  The drivers allow to configure 2 FIFOs as FIFO0 and FIFO1. 
+  The user can read the received messages sequentially, in the order they were received, by repeatedly 
+  reading Message Buffer 0 (zero), from each FIFO. The Rx FIFO ID filter table specifies filtering criteria for accepting 
+  frames  into the FIFO. This table is represented through a structure of pointers to <b>mcan_id_table_t</b> type,
+  which specifies if they match the target ID, whether extended or standard frames are accepted into the FIFO if they match the target ID and
+  the mask ID if configure the type of filter as classic.
+  
+  The user must provide a RxFIFOs configuration structure <b>rxfifo_conf_t</b> for every FIFO intended to be used.
+  Where will provide the behavior of the FIFO in case of FIFO full as overwrite last element or not accepted, 
+  the number of the Rx messages accepted in RxFIFO, and the level of trigger watermark warning interrupt.
+  If both RxFIFOs are used as RxFIFO0 and RxFIFO1 then the structure needs to have 2 elements, each used to initialize the FIFOs as
+  first element will be used for RxFIFO0 and second for RxFIFO1.
+  
+  Based on the filter type the behavior of the filter can change as follow:
+    - Range filter from ID1 to ID2, where ID2 must be greater than ID1, all the ID values between ID1 and ID2 are accepted 
+    to store in FIFO selected by filter configuration    
+    - Dual ID filter for ID1 or ID2, this will accept only the matching messages with ID1 and ID2 and are stored 
+    in FIFO selected by filter configuration
+    - Classic filter will accept messages with ID1 as filter value and ID2 as filter mask for filter ID1 and are stored 
+    in FIFO selected by filter configuration
+    - Filter element disable in case of STD filter elements.
+  
+  In order to use Rx FIFO filter mask option, enabled by calling <b>MCAN_DRV_SetRxFifoFilterMask()</b> this apply only 
+  for filters that are part from RxFIFO filter ID table. To enable the masking the filter need to be configured as Classic filter type. 
+  This function can be used only if at least one RxFIFO is used. 
+ 
+  When using <b>MCAN_DRV_RxFifo()</b> and <b>MCAN_DRV_RxFifoBlocking()</b> the driver will enable the interrupts 
+  for FIFO Overflow and Warning Level, if a callback is installed the user will be notified else the driver will
+  automatically clear the events without notification. After the reception of the frame is finished the interrupts are 
+  disabled.  
+
+  @code
+    #define INST_MCANCOM1 0U
+      
+/* Driver state configuration structure */
+    mcan_state_t canCom1_StateX;  
+  
+/* Will store STD ID=2 messages in RxFIFO 0 */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_0 = {
+    .filterType = FILTER_TYPE_CLASIC,
+    .filterConfig = FILTER_CONF_RX_FIFO0,
+    .isExtendedFrame = false,
+    .id1 = 2u,
+    .id2 = 2u
+};
+/* Will store SDT ID=1 messages in RxFIFO1 */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_1 = {
+    .filterType = FILTER_TYPE_CLASIC,
+    .filterConfig = FILTER_CONF_RX_FIFO1,
+    .isExtendedFrame = false,
+    .id1 = 1u,
+    .id2 = 1u
+};
+/* Will store messages with STD ID from 3 to 5 in RxFIFO0 */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_2 = {
+    .filterType = FILTER_TYPE_RANGE_ID,
+    .filterConfig = FILTER_CONF_RX_FIFO0,
+    .isExtendedFrame = false,
+    .id1 = 3u,
+    .id2 = 5u
+};
+/* This filter will not take part in filter process */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_3 = {
+    .filterType = FILTER_TYPE_RANGE_ID,
+    .filterConfig = FILTER_CONF_DISABLE,
+    .isExtendedFrame = false,
+    .id1 = 0u,
+    .id2 = 0u
+};
+/* Will store messages with EXT ID from 5 to 8 in RxFIFO0 */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_4 = {
+    .filterType = FILTER_TYPE_RANGE_ID,
+    .filterConfig = FILTER_CONF_RX_FIFO0,
+    .isExtendedFrame = true,
+    .id1 = 5u,
+    .id2 = 8u
+};
+/* Will store messages with EXT ID 3 in RxFIFO1 */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_5 = {
+    .filterType = FILTER_TYPE_CLASIC,
+    .filterConfig = FILTER_CONF_RX_FIFO1,
+    .isExtendedFrame = true,
+    .id1 = 3u,
+    .id2 = 3u
+};
+/* Will store messages with EXT ID 4 in RxFIFO1 the other values 3 and 5 are not covered by this filter
+because will hit previous ones */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_6 = {
+    .filterType = FILTER_TYPE_RANGE_ID,
+    .filterConfig = FILTER_CONF_RX_FIFO1,
+    .isExtendedFrame = true,
+    .id1 = 3u,
+    .id2 = 5u
+};
+/* This filter will not take part in filter process */
+const mcan_id_table_t McanCom1_mcan_id_table_t0_7 = {
+    .filterType = FILTER_TYPE_RANGE_ID,
+    .filterConfig = FILTER_CONF_DISABLE,
+    .isExtendedFrame = false,
+    .id1 = 0u,
+    .id2 = 0u
+};
+const mcan_id_table_t * McanCom1_mcan_id_table_t0[] = {
+    &McanCom1_mcan_id_table_t0_0,
+    &McanCom1_mcan_id_table_t0_1,
+    &McanCom1_mcan_id_table_t0_2,
+    &McanCom1_mcan_id_table_t0_3,
+    &McanCom1_mcan_id_table_t0_4,
+    &McanCom1_mcan_id_table_t0_5,
+    &McanCom1_mcan_id_table_t0_6,
+    &McanCom1_mcan_id_table_t0_7,
+};
+/* RxFIFOs configuration structure */ 
+const rxfifo_conf_t RxFifoConfigs[1] = {
+        {
+        .modeFIFO = FIFO_MODE_OVERWRITE,
+        .fifo_elements = 10u,
+        .fifo_watermark = 8u
+        },
+        {
+        .modeFIFO = FIFO_MODE_BLOCKING,
+        .fifo_elements = 6u,
+        .fifo_watermark = 4u
+        },
+    };
+
+/* User Configuration structure */    
+const mcan_user_config_t McanCom1_mcan_user_config_t0 = {
+    
+    .rx_num_mb = 0u,
+    .tx_num_mb = 0u,
+    .num_id_filters = 8u,
+    .rx_fifo_needed = MCAN_RXFIFO_1_2_ENABLE,
+    .mcanMode = MCAN_NORMAL_MODE,
+    .payload = MCAN_PAYLOAD_SIZE_8,
+    .fd_enable = false,
+    /* A bitrate of 500k at 40Mhz Clock */
+    .bitrate = {
+        .propSeg = 3u,
+        .phaseSeg1 = 7u,
+        .phaseSeg2 = 51u,
+        .preDivider = 4u,
+        .rJumpwidth = 0u
+    },
+    .bitrate_cbt = {
+        .propSeg = 3u,
+        .phaseSeg1 = 0u,
+        .phaseSeg2 = 1u,
+        .preDivider = 4u,
+        .rJumpwidth = 2u
+    },
+    .fifoConfigs = &RxFifoConfigs,
+    .filterConfigs = (mcan_id_table_t **)&McanCom1_mcan_id_table_t0[0]
+};
+    mcan_msgbuff_t data;
+    /* Initialize MCAN driver and FIFOs */
+    status = MCAN_DRV_Init(INST_MCANCOM1, &canCom1_StateX, &McanCom1_mcan_user_config_t0);
+    /* Read from RxFIFO0 first element received*/
+    status = MCAN_DRV_RxFifo(INST_MCOM1, 0U, &data);
+    /* Read from RxFIFO1 first element received*/
+    status = MCAN_DRV_RxFifo(INST_MCOM1, 1U, &data);
+    /* Wait for receive in RxFIFO0 */
+    while (STATUS_BUSY == MCAN_DRV_GetTransferStatus(INST_MCOM1, MCAN_RX_FIFO0 ,0U));
+    /* Wait for receive in RxFIFO1 */
+    while (STATUS_BUSY == MCAN_DRV_GetTransferStatus(INST_MCOM1, MCAN_RX_FIFO1 ,0U));
+    
+@endcode
+</p>
+ 
+  ## Important Notes ##
+<p>
+  - The MCAN driver does not handle clock setup or any kind of pin configuration. This is handled
+    by the <b>Clock Manager</b> and <b>PinSettings</b> modules, respectively. The driver assumes that
+    the correct clock configurations have been made, so it is the user's responsibility to set up
+    clocking and pin configurations correctly.
+  - The functions <b>MCAN_DRV_Receive()</b>, <b>MCAN_DRV_ReceiveBlocking()</b> and <b>MCAN_DRV_ConfigRxMb()</b>
+    will use associated number of message buffer with ID Filter for configuration of acceptance ID of the MBs.
+  - Because of MCAN can be set for MCAN1 or MCAN0 the driver can't work simultaneously on both interfaces.
+  - In case the time segments for default bitrate 500Kbs can't be calculated on the MCAN Module Clock value like 3.125Mhz
+    the <b>MCAN_DRV_GetDefaultConfig</b> will calculate the bitrate for next matching bitrate, in this case 480Kbs
+  - In case the Bitrate to time segments option in configuration tool is selected and if the desired bitrate and sampling point inserted can't
+    be calculated, a default value will be returned with the values Prop Seg as 59, Phase Seg 1 as 9, Phase Seg 2 as 9, Prescaler Division as 0.
+    These values correspond for a bitrate of 500Kbits and Sampling Point as 87.5 calculated at 40Mhz Clock.
+</p>
+
+   #### Example: ####
+@code
+/********* Start of Configuration **************/
+    #define INST_MCANCOM1 0U
+    #define TX_MAILBOX   (1U)
+    #define TX_MSG_ID    (2U)
+    #define RX_MAILBOX   (0U)
+    #define RX_MSG_ID    (1U)
+    mcan_state_t canCom1_StateX;
+    
+/*! McanCom1 configuration structure */
+
+/* User Configuration for MCAN Module */
+const mcan_user_config_t McanCom1_mcan_user_config_t0 = {
+    
+    .rx_num_mb = 8u,
+    .tx_num_mb = 8u,
+    .num_id_filters = 0u,
+    .rx_fifo_needed = MCAN_RXFIFO_DISABLED,
+    .mcanMode = MCAN_NORMAL_MODE,
+    .payload = MCAN_PAYLOAD_SIZE_8,
+    .fd_enable = false,
+    /* A bitrate of 500k at 40Mhz Clock */
+    .bitrate = {
+        .propSeg = 3u,
+        .phaseSeg1 = 7u,
+        .phaseSeg2 = 51u,
+        .preDivider = 4u,
+        .rJumpwidth = 0u
+    },
+    .bitrate_cbt = {
+        .propSeg = 3u,
+        .phaseSeg1 = 0u,
+        .phaseSeg2 = 1u,
+        .preDivider = 4u,
+        .rJumpwidth = 2u
+    },
+    .fifoConfigs = NULL,
+    .filterConfigs = (mcan_id_table_t **)&McanCom1_mcan_id_table_t0[0]
+};
+/********** End of Configuration ***********/
+    status_t status;
+    uint8_t dummy_data[10];
+    mcan_msgbuff_t data;
+    
+    /* Initialize MCAN driver */
+    status = MCAN_DRV_Init(INST_MCANCOM1, &canCom1_StateX, &McanCom1_mcan_user_config_t0);
+
+    /* Set information about the data to be received
+     *  - 1 byte in length
+     *  - Standard message ID
+     *  - Bit rate switch enabled to use a different bitrate for the data segment
+     *  - Flexible data rate enabled
+     *  - Use zeros for FD padding
+     */
+    mcan_data_info_t dataInfo =
+    {
+            .data_length = 8U,
+            .msg_id_type = CAN_MSG_ID_STD,
+			.fd_enable = false,
+			.enable_brs = false,
+			.is_remote = false,
+			.fd_padding = 0U
+    };
+    
+    /* Configure TX message buffer with index TX_MAILBOX and TX_MSG_ID as message ID */
+    status = MCAN_DRV_ConfigTxMb(INST_MCANCOM1, TX_MAILBOX, &dataInfo, TX_MSG_ID);
+    status = MCAN_DRV_Send(INST_MCANCOM1, TX_MAILBOX, &dataInfo, TX_MSG_ID, &dummy_data[0]);
+    /* Wait for driver to finish transmission */
+    while (MCAN_DRV_GetTransferStatus(INST_MCOM1, MCAN_TX_BUFF ,TX_MAILBOX) != STATUS_SUCCESS );
+    
+    /* Configure RX message buffer with index RX_MAILBOX and RX_MSG_ID as message ID */
+    status = MCAN_DRV_ConfigRxMb(INST_MCOM1, RX_MAILBOX, &dataInfo, RX_MSG_ID);
+    /* Configure where to store the data received 
+    status = MCAN_DRV_Receive(INST_MCOM1, RX_MAILBOX, &data);
+    /* Wait for driver to finish reception */
+    while(MCAN_DRV_GetTransferStatus(INST_MCOM1, MCAN_RX_BUFF ,RX_MAILBOX) != STATUS_SUCCESS );
+    
+@endcode
+
+  ## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\mcan\mcan_driver.c
+${S32SDK_PATH}\platform\drivers\src\mcan\mcan_hw_access.c
+${S32SDK_PATH}\platform\drivers\src\mcan\mcan_irq.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+\ref clock_manager
+\ref interrupt_manager
+
+@}*/

@@ -1,0 +1,266 @@
+/*!
+@defgroup eim Error Injection Module (EIM)
+@brief The S32 SDK provides Peripheral Drivers for the Error Injection Module (EIM) of S32 MCU
+@details
+<p>
+    The Error Injection Module (EIM) is mainly used for diagnostic purposes. It provides a method
+    for diagnostic coverage of the peripheral memories and offers support for inducing single-bit and multi-bit
+    inversions on read data when accessing peripheral RAMs.
+</p>
+<p>
+    Injecting faults on memory accesses can be used to exercise the SEC-DED ECC function of the related system.
+    Each EIM channel n corresponds to a source of potential memory error events.
+</p>
+
+<p>
+The following table shows the channel assignments of the module:
+
+|   EIM channel n |      S32K14x     |       S32K11x      |     S32Rx7x       |     MPC5746R      |     MPC5777C      |                S32V23x             |
+|:---------------:|:----------------:|:------------------:|:-----------------:|:-----------------:|:-----------------:|:----------------------------------:|
+|        0        |      SRAM_L      |       SRAM_U       |    DMA TCD RAM    |    DMA TCD RAM    |      PRAMC_0      |   Cortex-M4 TCM upper (bits31-0)   |
+|        1        |      SRAM_U      |       Reserved     |     Reserved      |     Reserved      |      PRAMC_1      |   Cortex-M4 TCM upper (bits63-32)  |
+|        2        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |      FEC MIB      |   Cortex-M4 TCM lower (bits31-0)   |
+|        3        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |      FEC RIF      |   Cortex-M4 TCM lower (bits63-32)  |
+|        4        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |   eDMA_0 TCD RAM  |   Cortex-M4 Code Cache Tag Way0    |
+|        5        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |   eDMA_1 TCD RAM  |   Cortex-M4 Code Cache Tag Way1    |
+|        6        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |   Cortex-M4 Code Cache Data Way0   |
+|        7        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |   Cortex-M4 Code Cache Data Way1   |
+|        8        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |   Cortex-M4 System Cache Tag Way0  |
+|        9        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |   Cortex-M4 System Cache Tag Way1  |
+|       10        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |   Cortex-M4 System Cache Data Way0 |
+|       11        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |   Cortex-M4 System Cache Data Way1 |
+|       12        |      Reserved    |       Reserved     |     Reserved      |     Reserved      |     Reserved      |             DMA TCD RAM            |
+
+@n
+</p>
+
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\eim\eim_driver.c
+${S32SDK_PATH}\platform\drivers\src\eim\eim_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+No special dependencies are required for this component
+
+*/
+
+/*!
+@n
+# Important Notes #
+## 1. On general usage: ##
+    - User needs to make sure that STACK memory is located in RAM differently than where EIM will inject an error.
+    - For generating a single bit error, user should flip only one bit out of DATA_MASK bit-field or one bit out of CHKBIT_MASK bit-field in EIM control registers.
+    - For generating a double bit error (non-correctable ECC error), user should flip only two bits out of DATA_MASK bit-field or two bits out of CHKBIT_MASK bit-field in EIM control registers.
+    - If more than two bits are flipped then there is no guarantee in design what type of error will be generated.
+    - Each target memory may have different characteristics or support for error detection and correction schemes. For specific information on these memories, please consult available device documentation.
+
+## 2. On device specific usage: ##
+### 2.1. S32K1xx: ###
+    - When using double bit error generation, user needs to define one region called ram_low then move the stack and m_interrupts to
+that region, otherwise the module can't be enabled because the RAM ECC mechanism can only correct one single error.
+    - After injecting a non-correctable error, the program jumps to HardFault_Handler(). User needs to cancel the HardFault_Handler() by disabling the EIM module inside the HardFault_Handler() function. Example shown below:
+@code
+    HardFault_Handler()
+    {
+        EIM_DRV_Deinit(INST_EIM1);
+    }
+@endcode
+
+### 2.2. S32V23x: ###
+    - For TCM memory upper or lower memories, user needs to change the configured EIM channel depending on the 32 bits 
+located at the memory address used. For example: for TCM Upper address 0x3E000000 (bits 31-0) user needs to configure EIM channel 0, for TCM Upper address 0x3E000004 (bits 63-32) user needs to configure EIM channel 1.
+Same is needed for TCM Lower addresses with EIM channels 2 and 3.
+    - When using a channel configuration targeting Cortex-M4 System Cache Tag (channels 8 and 9), a bus error response during exception processing will be received due to interaction with cache. 
+In this case, safety event recovery needs to be handled by an alternate CPU core - Cortex-A53 which shall disable EIM to clear the error.
+
+### 2.3. MPC5777C: ###
+    - When using a channel configuration targeting PRAMC (channels 0 and 1) the user must ensure the following:
+        - STACK memory is located in different region than EIM target memory
+        - target memory segment from SRAM must be initialized and aligned to 64 bits (to avoid multiple access operation), for example:
+@code
+    static uint32_t test_data[2] __attribute__ ((aligned (8))) = { 0xAA0000FF, 0xBB0000FF };
+@endcode
+        - after injecting a double bit error, the program jumps to IVOR1_Handler(). User needs to cancel the exception, inside the IVOR1_Exception_Handler() function, by clearing corresponding flags in MCSR (Machine Check Syndrome Register) and disable the EIM module.
+        - example:
+@code
+    /* Clear MCSR flags */
+    static void clear_MCSR(void)
+    {
+        PPCASM("e_lis %r7,0xFFFF");
+        PPCASM("se_subi  %r7,0x0001");
+        PPCASM("mtmcsr %r7");
+    }
+
+    /* Machine Check Interrupt Exception Handler */
+    void IVOR1_Exception_Handler(void)
+    {
+        EIM_DRV_Deinit(INST_EIM1);
+        clear_MCSR();
+    }
+@endcode
+
+Additional information about initializing and testing PRAMC memory space:
+- To initialize the ECC, each memory address must be written to a known value before it is read. This includes reads generated from the read-modify-write operation which occurs when a write transfer of less than 64 bits or unaligned write is requested.
+- Without this initialization step, a read from an address will most likely generate an uncorrectable ECC event.
+- Writes of size less than 64 bits cause a read-modify-write action as a consequence of the ECC coding scheme used. For this type of action, the RAM controller performs SEC/DED on the read data.
+
+### 2.4. All devices which support an EIM channel configuration targeting DMA TCD RAM: ###
+    - A CPU access to the TCD RAM area with EIM configured for generating a non-correctable ECC error, will receive a bus error response.
+    Therefore, a non-correctable ECC error in DMA TCD RAM can only be generated by DMA access.
+*/
+
+/*!
+@addtogroup eim_drv
+@ingroup eim
+@n
+# Basic Operations of EIM #
+1. To initialize EIM, call EIM_DRV_Init() with a user channel configuration array. 
+In the following code, EIM is initialized with default settings (after reset) for
+check-bit mask and data mask and the channels are set as enabled.
+@n
+<b> Configuration example for S32K14x: </b>
+    @code
+    #define INST_EIM1 (0U)
+    /* The number of configured channels */
+    #define EIM_CHANNEL_COUNT0 (2U)
+    /* Configuration structure array */
+    eim_user_channel_config_t userChannelConfigArr[] =
+    {
+        /* Configuration channel 0 */
+        {
+            .channel = 0x0U,
+            .checkBitMask = 0x00U,
+            .dataMask = 0x00U,
+            .enable = true
+        },
+        /* Configuration channel 1 */
+        {
+            .channel = 0x1U,
+            .checkBitMask = 0x00U,
+            .dataMask = 0x00U,
+            .enable = true
+        }
+    };
+    @endcode
+@n
+<b> Configuration example for S32K11x: </b>
+    @code
+        #define INST_EIM1 (0U)
+        /* The number of configured channels */
+        #define EIM_CHANNEL_COUNT0 (1U)
+        /* Configuration structure array */
+        eim_user_channel_config_t userChannelConfigArr[] =
+        {
+            /* Configuration channel 0 */
+            {
+                .channel = 0x0U,
+                .checkBitMask = 0x01U,
+                .dataMask = 0x00U,
+                .enable = true
+            }
+        };
+    @endcode
+@n
+    <b> Configuration example for S32Rx7x/MPC5746R: </b>
+    @code
+        #define INST_EIM1 (0U)
+        /* The number of configured channels */
+        #define EIM_CHANNEL_COUNT0 (1U)
+        /* Configuration structure array */
+        eim_user_channel_config_t userChannelConfigArr[] =
+        {
+            /* Configuration channel 0 */
+            {
+                .channel = 0x0U,
+                .checkBitMask = 0x01U,
+                .dataMask = 0x00U,
+                .dataMask1 = 0x00U,
+                .enable = true
+            }
+        };
+    @endcode
+@n
+    <b> Configuration example for MPC5777C: </b>
+    @code
+        #define INST_EIM1 (0U)
+        /* The number of configured channels */
+        #define EIM_CHANNEL_COUNT0 (2U)
+        /* Configuration structure array */
+        eim_user_channel_config_t userChannelConfigArr[] =
+        {
+            /* Configuration channel 0 */
+            {
+                .channel = 0x0U,
+                .checkBitMask = 0x01U,
+                .dataMask = 0x00U,
+                .dataMask1 = 0x00U,
+                .enable = true
+            },
+            /* Configuration channel 4 */
+            {
+                .channel = 0x4U,
+                .checkBitMask = 0x01U,
+                .dataMask = 0x00U,
+                .dataMask1 = 0x00U,
+                .enable = true
+            }
+        };
+    @endcode
+@n
+    <b> Configuration example for S32V23x: </b>
+    @code
+        #define INST_EIM1 (0U)
+        /* The number of configured channels */
+        #define EIM_CHANNEL_COUNT0 (1U)
+        /* Configuration structure array */
+        eim_user_channel_config_t userChannelConfigArr[] =
+        {
+            /* Configuration channel 12 */
+            {
+                .channel = 0x12U,
+                .checkBitMask = 0x00U,
+                .dataMask = 0x01U,
+                .dataMask1 = 0x00U,
+                .enable = true
+            }
+        };
+        /* Initialize the EIM instance 0 with the configured channel number and userChannelConfigArr */
+        EIM_DRV_Init(INST_EIM1, EIM_CHANNEL_COUNT0, userChannelConfigArr);
+    @endcode
+@n
+2. To get the default configuration (data mask, check-bit mask and enable status)
+    of a channel in EIM, call EIM_DRV_GetDefaultConfig(). Make sure that the operation
+    is not executed in target RAM where EIM will inject the error.
+    @code
+        /* EIM channel configuration structure */
+        eim_user_channel_config_t channelConfig;
+
+        /* Get default configuration of EIM channel 1 */
+        EIM_DRV_GetDefaultConfig(1U, &channelConfig);
+    @endcode
+@n
+3. To de-initialize EIM, call the EIM_DRV_Deinit() function.
+    This function sets all registers to reset values and disables EIM.
+    @code
+        /* De-initializes the EIM module */
+        EIM_DRV_Deinit(INST_EIM1);
+    @endcode
+
+*/

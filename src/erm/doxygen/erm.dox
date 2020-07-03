@@ -1,0 +1,263 @@
+/*!
+@defgroup erm Error Reporting Module (ERM)
+@brief The S32 SDK provides Peripheral Drivers for the Error Reporting Module (ERM) module of S32 SDK devices.
+@details
+<p>
+    The Error Reporting Module (ERM) provides information and optional interrupt
+    notification on memory errors events associated with ECC (Error Correction Code).
+</p>
+<p>
+    The ERM includes the following features:
+    - Capture of address information on single-bit correction and non-correctable ECC events.
+    - Optional interrupt notification on captured ECC events.
+    - Support for ECC event capturing for memory sources, with individual reporting
+    fields and interrupt configuration per memory channel.
+</p>
+
+<p>
+    Each ERM channel n corresponds to a source of potential memory error events. 
+    The following table shows the channel assignments:
+
+|   ERM channel n |      S32K14x     |       S32K11x      |      MPC5777C     |             S32V23x           |
+|:---------------:|:----------------:|:------------------:|:-----------------:|:-----------------------------:|
+|        0        |      SRAM_L      |       SRAM_U       |       PRAMC_0     |     Cortex-M4 TCM upper       |
+|        1        |      SRAM_U      |       Reserved     |       PRAMC_1     |     Cortex-M4 TCM lower       |
+|        2        |      Reserved    |       Reserved     |   eDMA_0 TCD RAM  |  Cortex-M4 Code Cache Tag     |
+|        3        |      Reserved    |       Reserved     |   eDMA_1 TCD RAM  |  Cortex-M4 Code Cache Data    |
+|        4        |      Reserved    |       Reserved     |       FEC MIB     |  Cortex-M4 System Cache Tag   |
+|        5        |      Reserved    |       Reserved     |       FEC RIF     |  Cortex-M4 System Cache Data  |
+|        6        |      Reserved    |       Reserved     |    PFLASH port 0  |          DMA TCD RAM          |
+|        7        |      Reserved    |       Reserved     |    PFLASH port 1  |            Reserved           |
+|        8        |      Reserved    |       Reserved     |       AIPS_0      |            Reserved           |
+|        9        |      Reserved    |       Reserved     |       AIPS_1      |            Reserved           |
+|       10        |      Reserved    |       Reserved     |      FEC e2eECC   |            Reserved           |
+|       11        |      Reserved    |       Reserved     |        CSE        |            Reserved           |
+|       12        |      Reserved    |       Reserved     |        SIPI       |            Reserved           |
+|       13        |      Reserved    |       Reserved     | Core0 instruction |            Reserved           |
+|       14        |      Reserved    |       Reserved     |     Core0 data    |            Reserved           |
+|       15        |      Reserved    |       Reserved     | Core1 instruction |            Reserved           |
+|       16        |      Reserved    |       Reserved     |     Core1 data    |            Reserved           |
+|       17        |      Reserved    |       Reserved     |    eDMA_0 e2eECC  |            Reserved           |
+|       18        |      Reserved    |       Reserved     |    eDMA_1 e2eECC  |            Reserved           |
+|       19        |      Reserved    |       Reserved     |       EBI e2eECC  |            Reserved           |
+
+@n
+</p>
+
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\erm\erm_driver.c
+${S32SDK_PATH}\platform\drivers\src\erm\erm_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+No special dependencies are required for this component
+
+*/
+
+/*!
+@n
+# Important Notes #
+<p>
+    1. The Cortex-M4 code cache and system cache memories support only parity error detection. (No SEC-DED ECC)
+    The parity errors are treated as non-correctable.
+    2. On MPC5777C, for the following ERM channels: 2, 3, 4 and 5, the error address captured is the relative array address and not the system address.
+</p>
+*/
+
+/*!
+@addtogroup erm_driver
+@ingroup erm
+
+@n
+# ERM Driver Initialization {#ERMInit}
+
+<p>
+    In order to use error reporting module in your application, the first thing to do is
+    to initialize it with user configuration input and set the interrupt configuration. 
+    This is done by calling the ERM_DRV_Init() function.
+    Note: <i>channelCnt</i> parameter takes values between 1 and the maximum channel count supported by the hardware.
+</p>
+
+@n
+# ERM Driver Operation {#ERMOp}
+
+<p>
+    After ERM initialization, the ERM_DRV_SetInterruptConfig() is used to set interrupt notification based on interrupt notification configuration.
+
+    The ERM_DRV_GetInterruptConfig() is used to get the current interrupt configuration of the available events (which interrupts are enabled/disabled).
+
+    The ERM_DRV_GetErrorDetail() is used to get the address of the last ECC event in Memory n and ECC event.
+    It can also provide information about ECC syndrome value on products that support it for certain ERM channels. Depending on the ECC event, the function identifies different information as shown below:
+    - In the event of a single-bit data inversion, the function identifies the bit position of the corrected data.
+    - In the event of a non-correctable address bit inversion, the function identifies the pertinent address bit position.
+    - In the event of a non-correctable multi-bit data inversion, the syndrome value does not provide any additional diagnostic information.
+
+    The ERM_DRV_ClearEvent() is used to clear both the record of an event and the corresponding interrupt notification.
+</p>
+
+Example code that can be used to configure the ERM driver can be found below:
+@code
+/* Device instance number */
+#define INST_ERM1 (0U)
+
+/* 1.1 Configuration example for for S32K14x: */
+/* The number of configured channel(s) */
+#define ERM_NUM_OF_CFG_CHANNEL (2U)
+
+/* Interrupt configuration 0 */
+const erm_interrupt_config_t erm1_Interrupt1 =
+{
+    .enableSingleCorrection = false,        /*!< Single correction interrupt disabled        */
+    .enableNonCorrectable   = true          /*!< Non-correctable error interrupt enabled     */
+};
+
+/* Interrupt configuration 1 */
+const erm_interrupt_config_t erm1_Interrupt2 =
+{
+    .enableSingleCorrection = true,         /*!< Single correction interrupt enabled         */
+    .enableNonCorrectable   = true          /*!< Non-correctable error interrupt enabled     */
+};
+
+
+/* User configuration */
+const erm_user_config_t erm1_InitConfig[] =
+{
+    /* Channel 0U */
+    {
+        .channel      = 0U,
+        .interruptCfg = &erm1_Interrupt1
+    },
+
+    /* Channel 1U */
+    {
+        .channel      = 1U,
+        .interruptCfg = &erm1_Interrupt2
+    }
+};
+
+/*  1.2 Configuration example for S32K11x: */
+/* The number of configured channel(s) */
+#define ERM_NUM_OF_CFG_CHANNEL (1U)
+
+/* Interrupt configuration 0 */
+const erm_interrupt_config_t erm1_Interrupt1 =
+{
+    .enableSingleCorrection = false,        /*!< Single correction interrupt disabled        */
+    .enableNonCorrectable   = true          /*!< Non-correctable error interrupt enabled     */
+};
+
+
+/* User configuration */
+const erm_user_config_t erm1_InitConfig[] =
+{
+    /* Channel 0U */
+    {
+        .channel      = 0U,
+        .interruptCfg = &erm1_Interrupt1
+    }
+};
+
+/* 1.3 Configuration example for MPC5777C: */
+/* The number of configured channel(s) */
+#define ERM_NUM_OF_CFG_CHANNEL (2U)
+
+/* Interrupt configuration 0 */
+const erm_interrupt_config_t erm1_Interrupt1 =
+{
+    .enableSingleCorrection = false,        /*!< Single correction interrupt disabled        */
+    .enableNonCorrectable   = true          /*!< Non-correctable error interrupt enabled     */
+};
+
+/* Interrupt configuration 1 */
+const erm_interrupt_config_t erm1_Interrupt2 =
+{
+    .enableSingleCorrection = true,        /*!< Single correction interrupt enabled          */
+    .enableNonCorrectable   = false        /*!< Non-correctable error interrupt disabled     */
+};
+
+/* User configuration */
+const erm_user_config_t erm1_InitConfig[] =
+{
+    /* Channel 2U */
+    {
+        .channel      = 2U,
+        .interruptCfg = &erm1_Interrupt1
+    },
+
+    /* Channel 17U */
+    {
+        .channel      = 17U,
+        .interruptCfg = &erm1_Interrupt2
+    }
+};
+
+/*  1.4 Configuration example for S32V23x: */
+/* The number of configured channel(s) */
+#define ERM_NUM_OF_CFG_CHANNEL (1U)
+
+/* Interrupt configuration 0 */
+const erm_interrupt_config_t erm1_Interrupt1 =
+{
+    .enableSingleCorrection = false,        /*!< Single correction interrupt disabled        */
+    .enableNonCorrectable   = true          /*!< Non-correctable error interrupt enabled     */
+};
+
+
+/* User configuration */
+const erm_user_config_t erm1_InitConfig[] =
+{
+    /* Channel 0U */
+    {
+        .channel      = 0U,
+        .interruptCfg = &erm1_Interrupt1
+    }
+};
+
+int main()
+{
+    /* Initializes the ERM module */
+    ERM_DRV_Init(INST_ERM1, ERM_NUM_OF_CFG_CHANNEL, erm1_InitConfig);
+    ...
+    /* De-Initializes the ERM module */
+    ERM_DRV_Deinit(INST_ERM1);
+    ...
+    return 0;
+}
+
+/* Interrupt handler */
+/* Interrupt handler for single bit error event*/
+void ERM_single_fault_IRQHandler()
+{
+    /* Clears the event for channel 1 */
+    ERM_DRV_ClearEvent(INST_ERM1, 1U, ERM_EVENT_SINGLE_BIT);
+    ...
+}
+
+/* Interrupt handler for non-correctable error event */
+void ERM_double_fault_IRQHandler()
+{
+    /* Clears the event for channel 0 */
+    ERM_DRV_ClearEvent(INST_ERM1, 0U, ERM_EVENT_NON_CORRECTABLE);
+    /* Clears the event for channel 1 */
+    ERM_DRV_ClearEvent(INST_ERM1, 1U, ERM_EVENT_NON_CORRECTABLE);
+    ...
+}
+@endcode
+*/

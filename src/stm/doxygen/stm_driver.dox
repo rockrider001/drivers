@@ -1,0 +1,54 @@
+/*!
+* @defgroup stm System Timer Module (STM)
+* @ingroup stm
+* @brief The S32 SDK provides Peripheral Drivers for the System Timer Module (STM).
+*
+* The System Timer Module (STM) is a 32-bit timer designed to support commonly required
+* system and application software timing functions. The STM includes a 32-bit up counter and
+* four 32-bit compare channels with a separate interrupt source for each channel
+*
+* The number of STM instances depends on the number of cores of MCU device, one for each core,
+* with four 32-bit compare channels in each STM
+* 
+* ## Hardware background ##
+*
+* The STM has the following features:
+*     - One 32-bit up counter with 8-bit prescaler
+*     - Four 32-bit compare channels
+*     - Independent interrupt source for each channel 
+*     - Counter can be stopped in debug mode 
+*     - STM runs on the system clock by default
+*         - For MPC574xC/MPC574xG: STM can switch between system clock FS80 or FXOSC clock for timer operation
+*         - For MPC574xP, S32R274, S32R372, MPC5746R, MPC5777C: STM runs only on system clock PBRIDGEx_CLK
+*         - For S32V234: STM runs only on system clock SYS6_CLK
+* 
+* 
+* If the STM is configured to use the FXOSC clock source for the case application software reads the STM Count register
+* (STM_CNT) the value returned may be incorrect. Note the default clock source for the STM is the FS80 (divided system clock) 
+* and this configuration is working properly. Consequently the value returned by the function STM_DRV_GetCounterValue() may be
+* incorrect when clock source is set to FXOSC option.
+*
+* ## Integration guideline ##
+*
+* ### Compilation units ###
+*
+* The following files need to be compiled in the project:
+* \verbatim
+${S32SDK_PATH}\platform\drivers\src\stm\stm_driver.c
+\endverbatim
+*
+* ### Include path ###
+*
+* The following paths need to be added to the include path of the toolchain:
+* \verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+*
+* ### Preprocessor symbols ###
+*
+* No special symbols are required for this component
+* 
+* ### Dependencies ###
+\ref clock_manager \n
+* 
+*/

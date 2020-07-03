@@ -1,0 +1,10 @@
+/*!
+@defgroup pit Periodic Interrupt Timer (PIT)
+@ingroup pit
+@brief The Periodic Interrupt Timer (PIT) is is an array of timers that can be used
+to raise interrupts and triggers. It includes a dedicated Real Time Interrupt Timer
+(RTI), which runs on a separate clock and can be used for system wakeup in STOP mode.
+@details
+The S32 SDK provides Peripheral Drivers for the Periodic Interrupt Timer (PIT).
+
+*/

@@ -1,0 +1,109 @@
+/*!
+  
+   @defgroup dspi Deserial Serial Peripheral Interface (DSPI) 
+   @brief Deserial Serial Peripheral Interface (DSPI) Peripheral Driver
+   <p>
+    The DSPI driver allows communication on an SPI bus.
+    </p>
+    ## Features ##
+   - Buffers handling interrupts or DMA
+   - Master or slave operation
+   - Provides blocking and non-blocking transmit and receive functions
+   - RX and TX hardware buffers (4 words)
+   - Configurable baud rate
+   - Up to 32 bits per frame
+
+   ## How to integrate DSPI in your application ##
+<p>
+  In order to use the DSPI driver it must be first initialized in either master or slave mode, 
+  using functions DSPI_MasterInit() or DSPI_SlaveInit(). Once initialized, it cannot 
+  be initialized again for the same DSPI module instance until it is de-initialized, using 
+  DSPI_Deinit(). Different DSPI module instances can function 
+  independently of each other.
+</p>
+
+<p>
+  In each mode (master/slave) are available two types of transfers: blocking and non-blocking. 
+  The functions which initiate blocking transfers will configure the time out for transmission. If 
+  time expires DSPI_MasterTransferBlocking() or DSPI_SlaveTransferBlocking() will return error and the
+  transmission will be aborted.
+</p>
+
+<p>
+  If the application use DSPI with DMA is mandatory to configure DMA driver before using DSPI.
+  Also, in DMA mode the application must handle this limitation: if the bits per frame is higher than
+  16 and DSPI and the first bit is the MSB the TX buffer should switch the first 16 bits with the last 
+  16 bits due to the hardware limitation of the PUSHR register size.
+  For example, if the application should sent 0x12345678 value on the bus the value from tx buffer
+  should be 0x56781234.
+</p>
+
+<p>
+  Depending on CPU type there are some differences. If FEATURE_DSPI_HAS_EXTENDED_MODE is not supported this driver
+  has the following restrictions:
+   -Maximum frame size is 16 bits/frame
+   -In master mode with DMA is necessary an extra parameter in configuration structure txAdditionalDMAChannel
+   -In master mode with DMA is mandatory to send minimum 2 frames at each transfer, otherwise the driver will
+trigger an DEV_ASSERT.   
+</p>
+ 
+
+  ## Important Notes ##
+<p>
+  - The DSPI slave allows only one configuration for SS polarity (active low).
+  - The driver enables the interrupts for the corresponding DSPI module, but any interrupt priority 
+  setting must be done by the application.
+  - The  driver will configure SCK to PCS delay, PCS to SCK delay, delay between transfers 
+  with default values. If your application needs other values for this parameters DSPI_MasterSetDelay function can be used.
+  - This driver doesn't support null buffers, so receiveBuffer and sendBuffer shouldn't be NULL.
+  </p>
+ ## Example code ##
+ @code
+ dspi_master_config_t dspi1_MasterInitConfig0 = 
+ {
+    .bitsPerSec    = 500000,
+    .pcsPolarity   = DSPI_ACTIVE_LOW,
+    .bitcount      = 8,
+    .clkPhase      = DSPI_CLOCK_PHASE_1ST_EDGE,
+    .clkPolarity   = DSPI_ACTIVE_HIGH,
+    .lsbFirst      = false,
+    .transferType  = DSPI_USING_INTERRUPTS,
+    .rxDMAChannel  = 255,
+    .txDMAChannel  = 255,
+    .callback      = NULL,
+    .callbackParam = NULL,
+    .continuousPCS = false,
+    .whichPCS = 0
+ };
+ dspi_state_t dspi1State;
+ 
+ dspi_slave_config_t dspi2_SlaveInitConfig0 = 
+ {
+    .bitcount      = 8,
+    .clkPhase      = DSPI_CLOCK_PHASE_1ST_EDGE,
+    .clkPolarity   = DSPI_ACTIVE_HIGH,
+    .transferType  = DSPI_USING_INTERRUPTS,
+    .rxDMAChannel  = 255,
+    .txDMAChannel  = 255,
+    .callback      = NULL,
+    .callbackParam = NULL
+ };
+ dspi_state_t dspi2State;
+ 
+ uint8_t master_send[5] = {1, 2, 3, 4, 5};
+ uint8_t master_receive[5];
+ uint8_t slave_send[5] = {1, 2, 3, 4, 5};
+ uint8_t slave_receive[5];
+
+ DSPI_MasterInit(DSPI0_INSTANCE, &dspi1State, &dspi1_MasterInitConfig0);
+ DSPI_SlaveInit(SPI0_INSTANCE, &dspi2State, &dspi2_SlaveInitConfig0);
+ DSPI_MasterSetDelay(DSPI0_INSTANCE, 1, 1, 1);
+ 
+ while(1)
+ {
+	DSPI_SlaveTransfer(SPI0_INSTANCE, slave_send, slave_receive, 5U);
+	DSPI_MasterTransferBlocking(DSPI0_INSTANCE, master_send, master_receive, 5U, 1000U);
+ }
+ 
+ @endcode
+@}*/

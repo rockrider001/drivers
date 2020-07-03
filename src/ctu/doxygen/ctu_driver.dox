@@ -1,0 +1,88 @@
+/*!
+ * @defgroup ctu_driver Cross-Triggering Unit (CTU)
+ * @ingroup ctu
+ * @brief Cross-Triggering Unit Peripheral Driver.
+ *
+ * The CTU peripheral allows cross triggering between ADC, PWM timers, on-chip general purpose timers, and external pins.
+ *
+ * ## Hardware background ##
+ * The CTU receives input triggers from PWM timers, on-chip general purpose timers, external pins and/or software.
+ * The output signals can control ADC conversions, can trigger other platform IPs (e.g. eTimers) or can be routed to external pins.
+ * The CTU includes also an internal counter, which allows assigning a specific delay to the output signals, relative to the input signals.\n
+ * Please note that the CTU includes a number of <i>double-buffered</i> registers, for which the written values take effect only after a special Master Reload Signal (MRS)
+ * occurs or another special purpose register is written.\n
+ * The CTU hardware architecture consists of two subunits: Trigger generator subunit (TGS) and Scheduler subunit (SU).\n
+ * The TGS receives CTU input signals and selects the active edges (including the ones used for MRS). It includes the counter which generates sequential trigger events.
+ * It also includes a trigger list (referred in the driver as <i>internal triggers</i>) with 8 x 16-bit double-buffered registers for timing comparison.
+ * It has two operation modes: triggered and sequential. The internal triggers are taken as input by the Scheduler subunit.\n
+ * The SU receives 8 trigger signals from TGS and starts a command list to the selected ADC or generates the trigger event outputs.
+ * It has the same functionality in both TGS modes: triggered and sequential.
+ * Each of the 4 SU outputs can be linked to any of the internal trigger events from TGS. Each trigger event can be linked to one or more SU outputs.\n
+ * The CTU also includes 4 result FIFOs for storing the ADC results. Each FIFO has its own interrupt line, DMA request signal and status register.\n
+ *
+ * ## Driver consideration ##
+ * The CTU Peripheral Driver provides access to all CTU hardware features.
+ * The main functionalities provided by the driver are:
+ *  - Configuration of global functionalities: functions for configuration of global CTU parameters (e.g. TGS operating mode, input triggers select, TGS counter compare value, etc.)
+ *  - Configuration of internal triggers: by internal trigger the driver refers to the TGS output trigger, input for SU. E.g. of internal trigger parameters: compare value (for delay), output triggers selected, etc.
+ *  - Configuration and manipulation of ADC result FIFOs
+ *  - Configuration of ADC command lists: command lists may be set to be triggered for execution by internal triggers.
+ *  - Manipulation of status, interrupt and error flags: functions for retrieving or resetting the available status flags
+ *  - Software triggering: software triggering of internal triggers and Master Reload Signal (MRS).
+ *  - Configuration of special CTU functionalities: digital filtering, external triggers duration, expected ADC conversion duration, etc.
+ *
+ * ## Interrupt handling ##
+ * The CTU Driver in S32 SDK does not use interrupts internally. These can be defined by the user application.
+ * There are two ways to add a CTU interrupt:
+ *  1. Using the weak symbols defined by start-up code. The user needs to define the methods for
+ *      the weak symbols already registered as handlers: e.g. <tt>CTU0_MRS_IRQHandler(void)</tt>, <tt>CTU0_T0_IRQHandler(void)</tt>,
+ *      <tt>CTU0_ADC_IRQHandler</tt>, etc., otherwise the linker uses a default ISR.
+ *      An error will be generated if methods with the same name are defined multiple times.
+ *      This method works regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM. The CTU interrupt numbers
+ *      are already defined as enum entries, e.g. CTU_0_MRS_IRQn, CTU_0_T0_IRQn, CTU_0_ADC_IRQn, etc.
+ * <p> Please note that for the actual CTU interrupts to get triggered, the user has to
+ * enable in the interrupt controller the CTU interrupts and also specifically enable the interrupt event using dedicated CTU driver function.
+ *
+ * ## Clocking and pin configuration ##
+ * The CTU Driver does not handle clock setup or any kind of pin
+ * configuration. This is handled by the Clock Manager and
+ * Pin Settings module, respectively. The driver assumes that correct clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ *
+ * ## Implicit dependencies ##
+ * Please note that the CTU Peripheral Driver does <b>not</b> configure any peripherals external to CTU, so it is the users' responsibility to
+ * configure the peripherals interacting with it:
+ *  1. HW modules generating input signals (e.g. eTimer) - for generating the CTU hw trigger inputs (when hardware triggering is used)
+ *  2. ADC modules for which conversions are triggered by the CTU. Please make sure that the ADC modules are already
+ * initialized, calibrated and configured to allow CTU triggering. For details on how the CTU triggers interfere with
+ * other ADC functionalities, please refer to the ADC documentation.
+ *  3. Other HW modules or external pins, which to which the  CTU output signals are routed.
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+  ${S32SDK_PATH}\platform\drivers\src\ctu\ctu_driver.c
+   \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+  ${S32SDK_PATH}\platform\drivers\inc\
+  \endverbatim
+ *
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ \ref clock_manager \n
+ * 
+ */

@@ -1,0 +1,92 @@
+/*!
+ * @defgroup bctu_driver Body Cross Triggering Unit (BCTU)
+ * @ingroup bctu
+ * @brief Body Cross Triggering Unit Peripheral Driver.
+ *
+ * The BCTU peripheral allows synchronization between ADC conversions and timer events.
+ * 
+ * ## Hardware background ##
+ * The BCTU receives several triggers from on chip timers and/or software trigger controlled
+ * by the host CPU. These signals are used in order to generate the ADC trigger signals for the ADC modules. \n
+ * Each trigger input selects one trigger configuration register. The trigger configuration register 
+ * holds the information about the target ADC and channel for the conversion.\n
+ * An additional feature (referred as <i>BCTU LIST</i>) allows a list of ADC channels to be associated with a trigger configuration register.
+ * In this case, a single trigger input event (either hw or sw) associated with the trigger configuration register 
+ * will start a sequence of ADC conversions. The ADC channels involved in the sequence of conversions
+ * are stored in the BCTU list.
+ *
+ * ## Driver consideration ##
+ * The BCTU Peripheral Driver provides access to all BCTU hardware features.
+ * The main functionalities provided by the driver are:
+ * <p><i> Global configuration: </i> functions for configuration of global BCTU parameters (e.g. operating mode, dma transfer of conversion results, etc.)
+ * <p><i> Status flags manipulation: </i> functions for retrieving or resetting the available status flags
+ * <p><i> Individual triggers and trigger list configuration: </i> functions for configuring or resetting trigger configurations associated with a trigger register.
+ * Also, provides a dedicated function for setting a list of conversions (configured in the BCTU list) - a list starts execution when the associated trigger register receives a hw or sw trigger input.
+ * For MPC5746R you can set also tag address for interfacing with PSI(Parallel Side Interface) as an attribute to the WDATA bus.
+ * <p><i> Software triggering and conversion results: </i> functions for disabling write protection on software trigger registers, triggering via software a conversion configured in a trigger configuration register, 
+ * and also retrieving conversion results (only data or full information of the conversion)
+ * 
+ * ## Interrupt handling ##
+ * The BCTU Driver in S32 SDK does not use interrupts internally. These can be
+ * defined by the user application.
+ * There are two ways to add a BCTU interrupt:
+ *  1. Using the weak symbols defined by start-up code. The user needs to define the methods for 
+ *      the weak symbols already registered as handlers: <tt>BCTU_ListLast_IRQHandler(void)</tt>
+ *      or <tt>BCTU_ConvUpdate_IRQHandler(void)</tt>, otherwise the linker uses a default ISR. 
+ *      An error will be generated if methods with the same name are defined multiple times. 
+ *      This method works regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM. The BCTU interrupt numbers 
+ *      are already defined as BCTU_ListLast_IRQn and BCTU_ConvUpdate_IRQn.
+ * <p> Please note that for the actual BCTU interrupts to get triggered, the user has to also
+ * enable in the interrupt controller the BCTU interrupts (BCTU_ListLast_IRQn and BCTU_ConvUpdate_IRQn)
+ * and also enable the desired interrupt in the BCTU global configuration.
+ * <p> Also, please note that when using interrupts enabled with BCTU list or conversion loops, the results may be overwritten between interrupt handling,
+ * depending on the duration of the interrupt handler for BCTU_ConvUpdate_IRQn and the actual duration of the ADC conversion. If lowering the ADC & BCTU clock frequency 
+ * is not feasible, conversion results may also be read directly from the ADC result registers, as an alternative to the single BCTU result register per ADC module.
+ *
+ * ## Clocking and pin configuration ##
+ * The BCTU Driver does not handle clock setup or any kind of pin
+ * configuration. This is handled by the Clock Manager and
+ * PORT module, respectively. The driver assumes that correct clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ * 
+ * ## Implicit dependencies ##
+ * Please note the BCTU Peripheral Driver does <b>not</b> configure any peripherals external to BCTU, so it is the users' responsibility to 
+ * configure the peripherals interacting with it:
+ *  1. Timer modules - for generating the BCTU hw trigger inputs (when hardware triggering is used)
+ *  2. ADC modules for which conversions are triggered by the BCTU. Please make sure that the ADC modules are already
+ * initialized, calibrated and configured to allow BCTU triggering. For details on how the BCTU triggers interfere with
+ * other ADC functionalities, please refer to the ADC documentation.
+ *  3. PSI(Parallel Side Port) interface to communicate with external SoC modules.
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+  ${S32SDK_PATH}\platform\drivers\src\bctu\bctu_driver.c
+    \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+  ${S32SDK_PATH}\platform\drivers\inc\
+  \endverbatim
+ * 
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ \ref clock_manager \n
+ \ref osif \n \n
+ *
+ */
+ * 
+ *
+ */

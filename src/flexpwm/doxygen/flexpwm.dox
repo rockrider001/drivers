@@ -1,0 +1,107 @@
+/*!
+ * @defgroup flexpwm Flexible Pulse Width Modulator (FlexPWM)
+ * @brief FlexPWM Driver
+ * 
+ * ## Hardware background ##
+ * The pulse width modulator module (FlexPWM) contains one or more PWM submodules,
+ * each capable of controlling a single half-bridge power stage. One or more fault channels
+ * may also be included.
+ * This PWM is capable of controlling most motor types: AC induction motors (ACIM),
+ * Permanent Magnet AC motors (PMAC), both brushless (BLDC) and brush DC motors
+ * (BDC), switched (SRM) and variable reluctance motors (VRM), and stepper motors.
+ * 
+ * Module features:
+ * - 16 bits of resolution for center, edge aligned, and asymmetrical PWMs
+ * - PWM outputs capable of operating as complementary pairs or independent channels
+ * - Can accept signed numbers for PWM generation
+ * - Independent control of both edges of each PWM output
+ * - Synchronization to external hardware or other PWM supported
+ *  - Double buffered PWM registers
+ *  - Integral reload rates from 1 to 16
+ * - Half cycle reload capability
+ * - Multiple output trigger events can be generated per PWM cycle via hardware
+ * - Support for double switching PWM outputs
+ * - Fault inputs can be assigned to control multiple PWM outputs
+ * - Programmable filters for fault inputs
+ * - Independently programmable PWM output polarity
+ * - Independent top and bottom deadtime insertion
+ * - Each complementary pair can operate with its own PWM frequency and deadtime values
+ * - Individual software control for each PWM output
+ * - All outputs can be programmed to change simultaneously via a "Force Out" event
+ * - PWMX pin can optionally output a third PWM signal from each submodule
+ * - PWMX channels not used for PWM generation can be used for buffered output compare functions
+ * - Channels not used for PWM generation can be used for input capture functions
+ * - Capture is supported only for X channels not A and B channels
+ * - Enhanced dual edge capture functionality
+ * - The option to supply the source for each complementary PWM signal pair from any of the following: 
+ *  - External digital pin
+ *  - Internal timer channel
+ *  - External ADC input, taking into account values set in ADC high and low limit registers
+ *
+ * ## How to use the FlexPWM driver in your application ##
+ * In order to be able to use the FlexPWM driver in your application, the first thing to do is
+ * initializing it with the desired configuration. This is done by calling the <b>FLEXPWM_DRV_SetupPwm</b> or
+ * <b>FLEXPWM_DRV_ConfigureInputCapture</b> depending on which functionality you want to use.
+ *
+ * ### Important Notes ###
+ * <p>
+ *   - Before using the FlexPWM driver the module clock must be configured.
+ *   - The user must enable the interrupts for the corresponding FlexPWM module if he wants to use any.
+ *   - If the user wants to use the output compare functionalities then these can be achieved using
+ *     the PWM capabilities as specified in section <b>40.4.2.5</b> in the Reference Manual.
+ *   - When using the fault protection, if the user wants to simulate a fault with FLEXPWM_DRV_SimulateFault
+ *     function without actually using the fault input pins then special care must be taken and the pins
+ *     and their respective electrical properties must still be configured accordingly(especially Pull Up/
+ *     Pull Down depending on the fault level detection)
+ *   
+ * </p>
+ * <p>
+ * The errata ERRATA_e9928 for the FlexPWM module is not treated in the driver so that the user is not
+ * restricted in the usage of the module through the driver code. 
+ * e9928: FlexPWM: Half cycle automatic fault clearing does not work in PWM submodule
+ * 0 under some conditions.<br>
+ * <b>Description:</b> When
+ * - the EXT_SYNC signal is selected to cause initialization by setting the Submodule 0 Control
+ * 2 Register FlexPWM_SUB0_CTRL2[INIT_SEL] = 11 and
+ * - a specific FAULTx input is associated with the submodule 0 outputs using the Submodule 0
+ * Fault Disable Mapping Register (FlexPWM_SUB0_DISMAP) and
+ * - the respective bit for that FAULTx is 0 in the FFULL bitfield of the Fault Status Register
+ * FlexPWM_FSTS and
+ * - the respective bit for that FAULTx is 1 in the FAUTO bitfield of the Fault Control Register
+ * FlexPWM_FCTRL,
+ * then the PWM outputs of submodule 0 will only be re-enabled at the cycle boundary (full cycle)
+ * and will not be re-enabled at the cycle midpoint (half cycle).<br>
+ * </p>
+ * <b>Workaround:</b> When the EXT_SYNC signal is used to cause initialization in submodule 0 and the submodule
+ * 0 PWM outputs are disabled by a specific FAULTx input, use full cycle automatic fault clearing
+ * for the specific FAULTx input by setting the corresponding bit of the Fault Status Register
+ * FlexPWM_FSTS[FFULL] to 1.
+ *
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\flexpwm\flexpwm_driver.c
+\endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+ *
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ * \ref clock_manager
+ *
+ * \ref interrupt_manager
+ *
+ @}
+ */

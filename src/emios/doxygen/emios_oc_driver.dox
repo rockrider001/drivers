@@ -1,0 +1,465 @@
+/*!
+   @defgroup oc_emios_driver Output compare (eMIOS)
+   @ingroup emios
+   @details
+   @brief Output compare mode (Single action output compare mode, Double action output compare mode).
+
+   ## Driver consideration ##
+   The MPC5748G has 3 eMIOS instances and each of eMIOS modules have 32 channels.
+   The MPC5746C has 2 eMIOS instances and each of eMIOS modules have 32 channels.
+   The MPC5777C and MPC5746R have 2 eMIOS instances and each of eMIOS instance have 16 channels.
+   They can be configured to operate in the following global modes:
+
+    - General-Purpose Input/ Output (GPIO)
+    - Single-Action Input Capture (SAIC)
+    - Single-Action Output Compare (SAOC)
+    - Input Pulse-Width Measurement (IPWM)
+    - Input Period Measurement (IPM)
+    - Double-Action Output Compare (DAOC)
+    - Modulus Counter (MC)
+    - Modulus Counter Buffered (MCB)
+    - Output Pulse-Width and Frequency Modulation Buffered (OPWFMB)
+    - Center Aligned Output Pulse Width Modulation with Dead Time Insertion Buffered (OPWMCB)
+    - Output Pulse-Width Modulation Buffered (OPWMB)
+    - Output Pulse-Width Modulation with Trigger (OPWMT)
+
+    Have 4 different types of channel, which are listed below( Not apply for MPC5777C and MPC5746R, because they support all modes on each channel ):
+
+<table>
+  <tr>
+    <th>TYPE G</th>
+    <th>TYPE X</th>
+    <th>TYPE Y</th>
+    <th>TYPE H</th>
+  </tr>
+  <tr>
+    <td>GPIO</td>
+    <td>GPIO</td>
+    <td>GPIO</td>
+    <td>GPIO</td>
+  </tr>
+  <tr>
+    <td>SAIC</td>
+    <td>SAIC</td>
+    <td>SAIC</td>
+    <td>SAIC</td>
+  </tr>
+    <tr>
+    <td>SAOC</td>
+    <td>SAOC</td>
+    <td>SAOC</td>
+    <td>SAOC</td>
+  </tr>
+    <tr>
+    <td></td>
+    <td>MC</td>
+    <td></td>
+    <td></td>
+  </tr>
+    <tr>
+    <td>MCB</td>
+    <td>MCB</td>
+    <td></td>
+    <td></td>
+  </tr>
+    <tr>
+    <td>IPWM</td>
+    <td></td>
+    <td></td>
+    <td>IPWM</td>
+  </tr>
+    <tr>
+    <td>IPM</td>
+    <td></td>
+    <td></td>
+    <td>IPM</td>
+  </tr>
+    <tr>
+    <td>DAOC</td>
+    <td></td>
+    <td></td>
+    <td>DAOC</td>
+  </tr>
+    <tr>
+    <td>OPWFMB</td>
+    <td>OPWFMB</td>
+    <td></td>
+    <td></td>
+  </tr>
+    <tr>
+    <td>OPWMCB</td>
+    <td></td>
+    <td></td>
+    <td></td>
+  </tr>
+    <tr>
+    <td>OPWMB</td>
+    <td>OPWMB</td>
+    <td>OPWMB</td>
+    <td>OPWMB</td>
+  </tr>
+    <tr>
+    <td>OPWMT</td>
+    <td>OPWMT</td>
+    <td>OPWMT</td>
+    <td>OPWMT</td>
+  </tr>
+</table>
+    Note that Channel Type X and G has internal counters. And channel configuration
+    should be following this table:
+    <table>
+  <tr>
+    <th>Channel</th>
+    <th>eMIOS0</th>
+    <th>eMIOS1</th>
+    <th>eMIOS2</th>
+  </tr>
+  <tr>
+    <td>0</td>
+    <td>X</td>
+    <td>X</td>
+    <td>X</td>
+  </tr>
+    <tr>
+    <td>8</td>
+    <td>X</td>
+    <td>X</td>
+    <td>X</td>
+  </tr>
+    <tr>
+    <td>16</td>
+    <td>X</td>
+    <td>X</td>
+    <td>X</td>
+  </tr>
+    <tr>
+    <td>22</td>
+    <td>X</td>
+    <td>X</td>
+    <td>X</td>
+  </tr>
+    <tr>
+    <td>23</td>
+    <td>X</td>
+    <td>X</td>
+    <td>X</td>
+  </tr>
+    <tr>
+    <td>24</td>
+    <td>X</td>
+    <td>X</td>
+    <td>X</td>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>G</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>11</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>12</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>13</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>14</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>15</td>
+    <td>H</td>
+    <td>H</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>17</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>18</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>19</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>20</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>21</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>25</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>26</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>27</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>28</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>29</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>30</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+  <tr>
+    <td>31</td>
+    <td>Y</td>
+    <td>Y</td>
+    <td>Y</td>
+  </tr>
+</table>
+   When using eMIOS user should follow steps:
+
+   - Setup system clock
+        - Setup system clock api
+   - Initialize global eMIOS
+        - EMIOS_DRV_InitGlobal
+   - Setup the counter buses used
+        - EMIOS_DRV_MC_InitCounterMode
+   - Init modes for the channels used
+        - EMIOS_DRV_OC_InitOutputCompareMode
+   - Init Pin
+        - Setup Pin api
+   - Enable global prescaler and timebase
+        - EMIOS_EnableGlobalEmios
+
+   ## How to use eMIOS driver in your application ##
+   For all operation modes the user need to configure emios_common_param_t. This structure will be used for eMIOS global initialization
+   (EMIOS_DRV_InitGlobal). The next functions used are specific for each operation mode.
+   Example:
+   @code
+    /* eMIOS global configuration structure for eMIOS1_InitConfig0 */
+    emios_common_param_t eMIOS1_InitConfig0 =
+    {
+        true,              /* If true, all channel in eMIOS group can enter debug mode */
+        true,              /* Low power mode or normal mode */
+        1U,                /* Select the clock divider value for the global prescaler in range (1-256) */
+        false,             /* Enable or disable global prescaler */
+        true,              /* Enable or disable global timebase */
+#if defined(FEATURE_EMIOS_STAC_CLIENT)
+        false,             /* Enable external timebase or disable */
+        0U                 /* Select the address of a specific STAC server to which the STAC is assigned */
+#endif
+    };
+
+    /* eMIOS global configuration structure for eMIOS1_InitConfig1 */
+    emios_common_param_t eMIOS1_InitConfig1 =
+    {
+        true,              /* If true, all channel in eMIOS group can enter debug mode */
+        true,              /* Low power mode or normal mode */
+        1U,                /* Select the clock divider value for the global prescaler in range (1-256) */
+        false,             /* Enable or disable global prescaler */
+        true,              /* Enable or disable global timebase */
+#if defined(FEATURE_EMIOS_STAC_CLIENT)
+        false,             /* Enable external timebase or disable */
+        0U                 /* Select the address of a specific STAC server to which the STAC is assigned */
+#endif
+    };
+
+   /* Initialize eMIOS Global 0 */
+    EMIOS_DRV_InitGlobal(0U,&eMIOS1_InitConfig0);
+
+    /* Initialize eMIOS Global 1 */
+    EMIOS_DRV_InitGlobal(1U,&eMIOS1_InitConfig1);
+
+	/* Enable eMIOS Global 0 */
+    EMIOS_DRV_EnableGlobalEmios(0U);
+
+	/* Enable eMIOS Global 0 */
+    EMIOS_DRV_EnableGlobalEmios(1U);
+
+	@endcode
+
+   ### Counter mode ###
+   For this mode the user needs to configure sub-mode, Period, internal prescaler, input signal trigger mode Falling edge/Trailing edge/Falling and trailing edge
+
+   Example:
+   @code
+    /* eMIOS counter mode configuration structure for eMIOS1_CntChnConfig0 */
+    emios_mc_mode_param_t eMIOS1_CntChnConfig0 =
+    {
+        EMIOS_MODE_MC_UP_CNT_CLR_START_INT_CLK,   /* Modulus counter up mode, clear on match start, using internal clock */
+        2000UL,                                   /* Period value */
+        EMIOS_CLOCK_DIVID_BY_1,                   /* Internal prescaler value */
+        true,                                     /* Enable Internal prescaler */
+        EMIOS_INPUT_FILTER_BYPASS,                /* Filter Value, ignore if not select external clock mode */
+        false,                                    /* Input capture filter state, ignore if not select external clock mode */
+        EMIOS_TRIGGER_EDGE_FALLING                /* Input signal trigger mode, ignore if not select external clock mode */
+    };
+
+	/* eMIOS counter mode configuration structure for eMIOS1_CntChnConfig0 */
+    emios_mc_mode_param_t eMIOS1_CntChnConfig0 =
+    {
+        EMIOS_MODE_MC_UP_CNT_CLR_START_INT_CLK,   /* Modulus counter up mode, clear on match start, using internal clock */
+        2000UL,                                   /* Period value */
+        EMIOS_CLOCK_DIVID_BY_1,                   /* Internal prescaler value */
+        true,                                     /* Enable Internal prescaler */
+        EMIOS_INPUT_FILTER_BYPASS,                /* Filter Value, ignore if not select external clock mode */
+        false,                                    /* Input capture filter state, ignore if not select external clock mode */
+        EMIOS_TRIGGER_EDGE_FALLING                /* Input signal trigger mode, ignore if not select external clock mode */
+    };
+
+    /* eMIOS counter mode configuration structure for eMIOS1_CntChnConfig1 */
+    emios_mc_mode_param_t eMIOS1_CntChnConfig1 =
+    {
+        EMIOS_MODE_MCB_UPDOWN_CNT_FLAGX1_INT_CLK,/* Modulus counter bufferd up/down mode, flags are generated only at match start, using internal clock */
+        2000UL,                                  /* Period value */
+        EMIOS_CLOCK_DIVID_BY_1,                  /* Internal prescaler value */
+        false,                                   /* Disable Internal prescaler */
+        EMIOS_INPUT_FILTER_BYPASS,               /* Filter Value, ignore if not select external clock mode */
+        false,                                   /* Input capture filter state, ignore if not select external clock mode */
+        EMIOS_TRIGGER_EDGE_FALLING               /* Input signal trigger mode, ignore if not select external clock mode */
+    };
+
+    /* eMIOS counter mode configuration structure for eMIOS1_CntChnConfig2 */
+    emios_mc_mode_param_t eMIOS1_CntChnConfig2 =
+    {
+        EMIOS_MODE_MCB_UP_COUNTER_INT_CLK,       /* Modulus counter buffered up mode, using internal clock */
+        3000UL,                                  /* Period value */
+        EMIOS_CLOCK_DIVID_BY_1,                  /* Internal prescaler value */
+        false,                                   /* Disable Internal prescaler */
+        EMIOS_INPUT_FILTER_BYPASS,               /* Filter Value, ignore if not select external clock mode */
+        false,                                   /* Input capture filter state, ignore if not select external clock mode */
+        EMIOS_TRIGGER_EDGE_FALLING               /* Input signal trigger mode, ignore if not select external clock mode */
+    };
+
+    /* eMIOS Counter mode Initialization for eMIOS1_CntChnConfig0 */
+    EMIOS_DRV_MC_InitCounterMode(0U,EMIOS_CNT_BUSA_DRIVEN,&eMIOS1_CntChnConfig0);
+
+	/* eMIOS Counter mode Initialization for eMIOS1_CntChnConfig1 */
+    EMIOS_DRV_MC_InitCounterMode(0U,EMIOS_CNT_BUSF_DRIVEN,&eMIOS1_CntChnConfig1);
+
+    /* eMIOS Counter mode Initialization for eMIOS1_CntChnConfig2 */
+    EMIOS_DRV_MC_InitCounterMode(0U,EMIOS_CNT_BUSB_DRIVEN,&eMIOS1_CntChnConfig2);
+
+    /* If you want to change period value */
+    EMIOS_DRV_MC_SetCounterPeriod(0U, EMIOS_CNT_BUSA_DRIVEN, 15000UL );
+
+    @endcode
+
+   ### Output compare mode ###
+    For this mode the user needs to configure parameters such: sub-mode, timebase, match leading edge value, match trailing edge value, output active mode(negative/positive pulse). All this information is included in emios_oc_param_t data type.
+
+    EMIOS_DRV_OC_SetSingleActOutputCmpMatch can be used to update match value at single action output compare mode.
+    EMIOS_DRV_OC_SetDoubleActOutputCmpMatch can be used to update leading match and trailing match value at single action output compare mode.
+
+   Example:
+    @code
+    /* eMIOS Output compare mode configuration structure for eMIOS1_OCChnConfig0 */
+    emios_oc_param_t eMIOS1_OCChnConfig0 =
+    {
+        EMIOS_MODE_SAOC,       /* Single action output compare mode */
+        EMIOS_BUS_SEL_A,       /* Counter bus selected */
+        500UL,                 /* Match value of leading edge in DAOC mode or Match value of compare mode in SAOC mode */
+        0U,                    /* Match value of leading edge. Ignore if SAOC mode selected */
+        EMIOS_NEGATIVE_PULSE   /* Output active positive / negative pulse */
+    };
+
+    /* eMIOS Output compare mode Initialization for eMIOS1_OCChnConfig0 */
+    EMIOS_DRV_OC_InitOutputCompareMode(0U, 0U, &eMIOS1_OCChnConfig0);
+
+	/* If you want to update match value at single action output compare mode */
+	EMIOS_DRV_OC_SetSingleActOutputCmpMatch(0U, 0U, 5000UL);
+
+    @endcode
+
+@}*/

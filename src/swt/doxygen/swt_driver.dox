@@ -1,0 +1,269 @@
+/*!
+   @defgroup swt Software Watchdog Timer (SWT)
+   @brief The S32 SDK provides Peripheral Drivers for the Software Watchdog Timer (SWT) module of S32 SDK devices.
+   @details
+
+   ## Hardware background ##
+
+    The Software Watchdog Timer (SWT) is a peripheral module that can prevent system
+    lockup in situations such as software getting trapped in a loop or if a bus transaction fails
+    to terminate. When enabled, the SWT requires periodic execution of a watchdog
+    servicing operation. The servicing operation resets the timer to a specified time-out
+    period. If this servicing action does not occur before the timer expires, the SWT generates
+    an interrupt or hardware reset request. The SWT can be configured to generate a reset
+    request or interrupt on an initial time-out. The SWT always generates a reset request on a
+    second consecutive time-out.
+
+    The SWT has the following features:
+    - 32-bit time-out register to set the time-out period
+    - Programmable selection of window mode or regular servicing
+    - Programmable selection of reset or interrupt on an initial time-out
+    - Programmable selection of the servicing mode
+    - Master access protection
+    - Hard and soft configuration lock bits
+    - Reset configuration inputs allow timer to be enabled out of reset
+
+    The SWT supports three device modes of operation: normal, debug and stop.
+    - When the SWT is enabled in normal mode, its counter runs continuously.
+    - In debug mode, operation of the counter is controlled by the FRZ bit in the SWT_CR.
+    If the FRZ bit is set, the counter is stopped in debug mode, otherwise it continues to run.
+    - In stop mode, operation of the counter is controlled by the STP bit in the SWT_CR.
+    If the STP bit is set, the counter is stopped in stop mode, otherwise it continues to run.
+
+   ## Instance support ##
+
+     Instance  |MPC5744P|MPC5746C|MPC5748G|MPC5746R|MPC5777C|S32R274|S32R372|S32V234|SJA1110|
+    :---------:|:------:|:------:|:------:|:------:|:------:|:-----:|:-----:|:-----:|:-----:|
+         0     |   x    |   x    |   x    |   x    |   x    |   x   |   x   |   x   |   x   |
+         1     |        |   x    |   x    |   x    |   x    |   x   |   x   |   x   |       |
+         2     |        | x(HSM) |   x    |        |        |   x   |       |   x   |       |
+         3     |        |        | x(HSM) |   x    |        |       |       |   x   |       |
+         4     |        |        |        |        |        |       |       |   x   |       |
+    HSM: This instance can be serviced only by HSM (Hardware Security Module).
+
+   ## ERRATA ##
+    S32R274:
+    - E10326: Out of lockstep fault for instruction and data cache memories is
+    incorrectly indicated when watchdog is serviced in fixed address execution
+    service mode. <b>Fixed Address Execution</b> service mode should not be used
+    for SWT_0 when the safety core is configured in lockstep execution mode.
+
+   ## Note ##
+
+    1. SWT_0, SWT_1, and SWT_2 could be serviced by any core, however, SWT_HSM can be serviced only by HSM.
+    2. The default configuration for the SWT_HSM is enabled out of power on reset only if HSM is enabled.
+    3. For SJA1110: SWT interrupt is tied to NMI interrupt, which means that the SWT IRQ will triggers to NMI Handler when the timer expires.
+
+ */
+
+/*!
+@addtogroup swt
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\swt\swt_driver.c
+${S32SDK_PATH}\platform\drivers\src\swt\swt_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+No special dependencies are required for this component
+
+ */
+
+/*!
+@addtogroup swt
+
+# Pre-Initialization information of SWT module
+
+- Before using the SWT driver the protocol clock of the module must be configured by the application.
+
+
+## Initialization and De-initialize
+
+To initialize the SWT module, call the SWT_DRV_Init() function and provide the user configuration data structure.
+This function sets the configuration of the SWT module automatically and enables the SWT counter. \n
+Note before initializing:
+ - Only masters are provided access rights can configure the SWT instance.
+
+This is example code to configure the SWT driver on MPC5748G:
+1. Define SWT instance
+~~~~~{.c}
+    /* SWT 0 */
+    #define INST_SWT 0U
+
+    /* Status variable */
+    status_t status;
+~~~~~
+
+2. Configuration
+~~~~~{.c}
+    /* User configuration */
+    swt_user_config_t userConfig =
+    {
+        /* Sets access right for all bus masters */
+        .mapConfig = 0xFFU,
+        /* Invalid access to the SWT generates a bus error */
+        .invalidReset = false,
+        /* The SWT counter continues to run in stop mode */
+        .stop = false,
+        /* The SWT counter continues to run in debug mode */
+        .debug = false,
+        /* Regular mode */
+        .winEnable = false,
+        /* Disables interrupt */
+        .intEnable = false,
+        /* Fixed Service Sequence mode */
+        .serviceMode = SWT_FS_SEQ_MODE,
+        /* Timeout value */
+        .timeoutValue = 2560U,
+        /* Window value (set if the SWT is in window mode)*/
+        .windowValue = 0U,
+        /* Initial key (set if servicing mode is Keyed Service Sequence mode) */
+        .initKey = 0U,
+        /* Do not lock the SWT configuration */
+        .lockConfig = SWT_UNLOCK
+    };
+~~~~~
+or get default configuration
+~~~~~{.c}
+    swt_user_config_t userConfig;
+    /* Gets default configuration */
+    SWT_DRV_GetDefaultConfig(&userConfig);
+~~~~~
+
+3. Initializes
+~~~~~{.c}
+    /* Initializes the SWT instance */
+    status = SWT_DRV_Init(INST_SWT, &userConfig);
+~~~~~
+
+4. Refresh counter if valid window:
+- Regular mode: service sequence can be done at any time before timeout.
+- Window mode : service sequence is valid only when the down counter is less than the configured window value.
+(Only apply for servicing mode is Fixed Service Sequence mode or Keyed Service Sequence mode. Please see <b>Service mode watchpoint input</b> to use others mode)
+~~~~~{.c}
+    /* Services SWT */
+    SWT_DRV_Service(INST_SWT);
+~~~~~
+
+5. De-initializes
+~~~~~{.c}
+    /* De-initializes the SWT instance */
+    status = SWT_DRV_Deinit(INST_SWT);
+~~~~~
+
+## Basic Operations
+
+If the SWT is not locked by hard lock, use the function below to change the configuration: @n
+Should use SWT_DRV_StopTimer() to disable SWT counter to avoid unexpected behavior when SWT counter is running
+~~~~~{.c}
+    /* Stops SWT timer */
+    status = SWT_DRV_StopTimer(INST_SWT);
+~~~~~
+- The SWT_DRV_SetTimeoutValue() can be used to set the timeout value.
+~~~~~{.c}
+    /* Update the timeout value */
+    status = SWT_DRV_SetTimeoutValue(INST_SWT, 100000U);
+~~~~~
+- The SWT_DRV_SetWindowConfig() can be used to enable or disable window mode and set window value if enabled.
+~~~~~{.c}
+    /* Sets window mode 50% of timeout value */
+    status = SWT_DRV_SetWindowConfig(INST_SWT, true, 50000U);
+~~~~~
+- The SWT_DRV_SetServiceConfig() can be used to set service mode and initial service key if in Keyed Service mode.
+~~~~~{.c}
+    /* Update service mode using Keyed Service Sequence mode and the initial key is 0xFF */
+    status = SWT_DRV_SetServiceConfig(INST_SWT, SWT_KS_SEQ_MODE, 0xFFU);
+~~~~~
+- The SWT_DRV_SetIntConfig() can be used to enable or disable timeout interrupt.
+~~~~~{.c}
+    /* Enables interrupt */
+    status = SWT_DRV_SetIntConfig(INST_SWT, true);
+~~~~~
+
+Use SWT_DRV_StartTimer() to enable the SWT counter again.
+~~~~~{.c}
+    /* Start SWT timer with the above configuration */
+    status = SWT_DRV_StartTimer(INST_SWT);
+~~~~~
+Note: All above functions will unlock the SWT if it is locked by soft lock
+- The SWT_DRV_LockConfig() API is provided to lock the SWT instance.
+~~~~~{.c}
+    /* Lock the SWT using soft lock mechanism */
+    status = SWT_DRV_LockConfig(INST_SWT, SWT_SOFTLOCK);
+~~~~~
+- The SWT_DRV_GetIntStatus() can be used to get timeout interrupt status.
+~~~~~{.c}
+    bool intStatus = false;
+    /* Gets interrupt status */
+    intStatus = SWT_DRV_GetIntStatus(INST_SWT);
+~~~~~
+- The SWT_DRV_ClearIntFlag() can be used to clear timeout interrupt flag.
+~~~~~{.c}
+    /* Clears interrupt flag if occurs */
+    if (intStatus)
+    {
+        SWT_DRV_ClearIntFlag(INST_SWT);
+    }
+~~~~~
+
+After SWT counter is disabled
+- The SWT_DRV_GetCounterValue() can be used to get current counter value.
+~~~~~{.c}
+    uint32_t count = 0U;
+    /* Stops SWT timer */
+    status = SWT_DRV_StopTimer(INST_SWT);
+    /* Gets the SWT counter value */
+    status = SWT_DRV_GetCounterValue(INST_SWT, &count);
+~~~~~
+
+## Important note:
+
+- Lock configuration:
+  - If the hard lock is set, it can only be unlocked by a reset.
+- Synchronization logic in the SWT design:
+  - Recognition of the service sequence or configuration changes may require up to 3 system plus 7 counter clock cycles. So if the counter clock is slow (e.g. SIRC 128KHz), need a wait time (inversely proportional to counter clock frequency) to synchronization completed.
+  - Watchdog design slightly delays when the window opens. This delay could be up to 3 system clock cycles plus 4 counter clock cycles.
+  - The read value from counter can lag behind the internal counter value for up to 6 system clock cycles plus 8 counter clock cycles. Addition, if the counter clock frequency is very high (e.g. IRCOSC 16MHz), the process time of driver code can greater than sync time. Therefore, the read value immediately after disabling the watchdog may be higher than the actual value of the internal counter.
+
+## Reset assertion
+
+For some derivatives each SWT can assert a reset when the watchdog timer expires or when an invalid access is made.@n
+To generate the reset, the SWT fault source needs to be configured in the FCCU module as a Short/Long reset request.@n
+This reset causes a system reset equivalent to assertion of the RESET pin.@n
+For more information on \ref fccu "FCCU", please see the available documentation.
+
+FCCU module is needed for the following devices and their derivatives.
+- \b MPC5744P - reset assertion needs to be configured
+- \b S32R274  - reset assertion needs to be configured
+- \b S32R372  - reset assertion needs to be configured
+- \b MPC5746R - timeout interrupt and reset assertion needs to be configured
+- \b MPC5777C - timeout interrupt and reset assertion needs to be configured
+.
+
+## Service mode watchpoint input
+
+Each SWT comes out of reset in <i>Fixed Service Sequence</i> mode, but the Instruction Address Compare 8 (IAC8) register (SPR 568) can be used for servicing by using the SWT jd_watchpt input.
+To use SWT address execution modes for this purpose, the e200z4/z2 core IAC8 register signal jd_watchpt[15] is connected to the SWT jd_watchpt input.
+The jd_watchpt[15] signal tells the SWT that an IAC8 compare occurred. @n
+The SWT is serviced by executing code at the address loaded into the IAC8 register:
+- For Fixed Address Execution: the IAC8 register cannot be updated while the watchdog is enabled.
+If the SWT is in <i>Fixed Address Execution</i> mode, an SWT output signal tells the core; this <i>freezes</i> changes to the IAC8 register when the SWT is enabled.
+- For Incremental Address Execution: the IAC8 register can be updated.
+
+ */

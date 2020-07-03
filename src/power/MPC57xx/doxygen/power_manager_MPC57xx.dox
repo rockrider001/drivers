@@ -1,0 +1,113 @@
+/*!
+@defgroup power_manager_mpc57xx Power Manager Driver
+@ingroup power_manager
+@brief This module covers the device-specific clock_manager functionality implemented for MPC57xx SOC.
+
+## Hardware background ##
+
+The Mode Entry Module (MC_ME) controls the chip mode and mode transition sequences in all
+functional states. It also contains configuration, control, and status registers accessible
+for the application. The purpose of the MC_ME is to minimize the current consumption of device modules.
+
+## Driver consideration ##
+
+Power mode entry and list of active peripherals options are provided at
+initialization time through the power manager user configuration structure.
+With platform is MPC5748G, MPC5746C, the available power mode entries are the following ones:RESET, SAFE, DRUN, RUN0, RUN1, RUN2, RUN3, STOP0, STANDBY0.
+With platform is MPC5744P, MPC5746R, S32R274, S32R372 the available power mode entries are the following ones:RESET, TEST, SAFE, DRUN, RUN0, RUN1, RUN2, RUN3, HALT0, STOP0. 
+S32R274, S32R372 do not include flashMode field in the power_manager_user_config_t structure.
+
+This is an example of configuration:
+@code
+
+ #define RUN1 0                        /* define index RUN1 mode of power_manager_mode_config_t */
+ #define STOP0 1                        /* define index STOP0 mode of power_manager_mode_config_t */
+ #define POWER_MANAGER_CONFIG_CNT 2U   /*! @brief Count of user configuration structures */
+ #define POWER_MANAGER_CALLBACK_CNT 0U /*! @brief Count of user Callbacks */
+
+ power_manager_user_config_t pwrMan1_InitConfig0 = {
+     .powerMode = POWER_MANAGER_RUN1,                                 /*!< Power manager mode */
+     .powerLevel = MC_ME_PWRLVL_0,                                    /*!< Relative power level indicator */
+     .flashMode = MC_ME_FLASH_RUN_MODE,                               /*!< Flash power-down control */
+     .outputPowerdown = false,                                        /*!< Output power-down control */
+     .mainVoltage = true                                              /*!< Main voltage regulator control */
+ };
+ power_manager_user_config_t pwrMan1_InitConfig1 = {
+     .powerMode = POWER_MANAGER_STOP0,                                /*!< Power manager mode */
+     .powerLevel = MC_ME_PWRLVL_0,                                    /*!< Relative power level indicator */
+     .flashMode = MC_ME_FLASH_POWER_DOWN_MODE,                        /*!< Flash power-down control */
+     .outputPowerdown = false,                                        /*!< Output power-down control */
+     .mainVoltage = true                                              /*!< Main voltage regulator control */
+ };
+
+ power_manager_user_config_t *powerConfigsArr[] = {
+     &pwrMan1_InitConfig0,
+     &pwrMan1_InitConfig1
+ };
+
+ power_manager_callback_user_config_t * powerCallbacksConfigsArr[] = {(void *)0};
+
+ if (STATUS_SUCCESS != POWER_SYS_Init(&powerConfigsArr, POWER_MANAGER_CONFIG_CNT, &powerStaticCallbacksConfigsArr, POWER_MANAGER_CALLBACK_CNT);
+ {
+     ...
+ }
+ else {
+     ...
+ }
+
+ if (STATUS_SUCCESS != POWER_SYS_SetMode(RUN1,POWER_MANAGER_POLICY_AGREEMENT)) {
+     ...
+ }
+ else {
+     ...
+ }
+
+ if (STATUS_SUCCESS != POWER_SYS_SetMode(STOP0,POWER_MANAGER_POLICY_AGREEMENT)) {
+     ...
+ }
+ else {
+     ...
+ }
+@endcode
+
+## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\power_manager.c
+${S32SDK_PATH}\platform\drivers\src\MPC57xx\power_manager_MPC57xx.c
+${S32SDK_PATH}\platform\drivers\src\MPC57xx\power_mc_me_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+${S32SDK_PATH}\platform\drivers\src\power\
+${S32SDK_PATH}\platform\drivers\src\power\MPC57xx\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+\ref clock_manager
+
+## Important Note
+1. The interrupt or wakeup event is actived while transition to HALT0, STOP0 or STANDBY0 mode, the transition is aborted.
+2. A wakeup event from STOP0, HALT0, STANDBY0 mode may result in a power on reset assertion if the internal ballast is used.
+User does not use the internal ballast in applications using any of the STOP0, HALT0 or STANDBY0 mode. User must
+ensure the device is set up to use external ballast(INT_BAL_SELECT pin tied to ground on board).
+3. The driver code will switch to RUN0 mode before enter STOP0 or HALT0 mode from DRUN mode. After CPU exited STOP0, HALT0
+by interrupt or wake up signal, the current mode is RUN0 mode.
+4. Only reset CPU or switch DRUN mode to exit SAFE mode.
+5. On S32R274, S32R372: An invalid mode (Clock Usage) configuration error can occur if the Sigma-Delta PLL and PLL1 are switched on or off independently
+and mode transition fail. User must ensure any mode transition that switches on or switches off SDPLL and PLL1 sets
+both to the same on or off state in the target mode. After CPU woke up from STOP0/HALT0 mode, the previous mode would be RUNx mode.
+
+*/

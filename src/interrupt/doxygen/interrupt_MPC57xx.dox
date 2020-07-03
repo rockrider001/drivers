@@ -1,0 +1,91 @@
+/*!
+@defgroup interrupt_manager  Interrupt Manager (Interrupt)
+@brief The C55 SDK Interrupt Manager provides a set of API/services to configure the Interrupt Controller (INTC).
+@details 
+The Interrupt Controller (INTC) module schedules interrupt requests(IRQs) from software and internal peripherals to one or
+more processors. It provides a unique vector for each interrupt request source. 
+It also provides 16 priorities so that lower priority ISRs do not delay the execution of higher priority ISRs.
+The INTC supports software-settable interrupt requests which can be used to separate the work involved in servicing 
+an interrupt request into two parts, a high-priority portion and a low-priority portion.
+
+# Overview
+
+The Interrupt Manager provides a set of APIs so that the application can enable or disable an interrupt
+for a specific device and also set priority, and other features. Additionally, it provides 
+a way to update the vector table for a specific device interrupt handler.
+
+# Interrupt Names
+
+Each chip has its own set of supported interrupt names defined in the chip-specific header file (see \ref IRQn_Type).
+
+This is an example to enable/disable an interrupt for the ADC0_IRQn:
+~~~~~{.c}
+    #include "interrupt_manager.h"
+
+    INT_SYS_EnableIRQ(ADC0_IRQn);
+
+    INT_SYS_DisableIRQ(ADC0_IRQn);
+
+~~~~~
+
+# Important Notes ##
+
+For MPC5777C, there is a hardware limitation related to priority elevation. As noted in the MPC5777C RM Rev. 8
+(Chapter 15.9.5.2.1 - Interrupt with blocked priority): a lower priority interrupt might be triggered before a higher
+priority one after disabling interrupts, triggering both interrupts and re-enabling them.
+
+\verbatim
+Chapter 15.9.5.2.1 - Interrupt with blocked priority
+
+Disabling interrupts and re-enabling them after the PRI elevation, as well as providing
+additional core clocks of delay after interrupts have been enabled, provides enough delay
+for the ISR that has elevated its PRI to be interrupted by a pending ISR before the ISR
+elevating PRI accesses a shared memory block.
+\endverbatim
+
+Here is a code example for abovementioned issue.
+
+@code
+  INT_SYS_SetPriority(SS0_IRQn, LOW_PRIORITY);
+  INT_SYS_SetPriority(SS3_IRQn, HIGH_PRIORITY);
+
+  /* Disable the interrupts */
+  INT_SYS_DisableIRQGlobal();
+
+  /* Trigger both interrupts */
+  INT_SYS_SetSoftwareIRQRequest(SS0_IRQn);
+  INT_SYS_SetSoftwareIRQRequest(SS3_IRQn);
+
+  /* Re-enable the interrupts */
+  INT_SYS_EnableIRQGlobal();
+
+  /* It would be expected for the SS3_IRQn interrupt
+   * to trigger first. However, due to this hardware
+   * limitation, SS0_IRQn might trigger first */
+@endcode
+
+## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\interrupt\interrupt_manager_MPC57xx.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+This component does not have any dependencies.
+
+*/

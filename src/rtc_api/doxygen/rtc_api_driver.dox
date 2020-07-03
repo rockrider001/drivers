@@ -1,0 +1,221 @@
+/*! 
+ * @defgroup rtc_api Real Time Clock (RTC-API)
+ * @brief RTC-API Driver
+ * 
+ * ## Hardware background ##
+ * The RTC is a free running counter used for time keeping applications. The RTC may be
+ * configured to generate an interrupt at a pre-defined interval independent of the mode of
+ * operation (run mode or low power mode). If in a low power mode when the RTC interval
+ * is reached, the RTC will first generate a wakeup and then assert the interrupt request. The
+ * RTC also supports an autonomous periodic interrupt function used to generate a periodic
+ * wakeup request to exit a low power mode or an interrupt request.
+ * 
+ * Module features:
+ * - 32 bit counter
+ * - 4 selectable counter clock sources
+ *  - 128 KHz SIRC
+ *  - 32 KHz SXOSC
+ *  - 16 MHz FIRC
+ *  - 8-40 MHz FXOSC
+ * - Optional 512 prescaler and optional 32 prescaler connected in series in the clock path feeding the 32 bit counter.
+ * - Based on prescaler used the timer guards alarm value to respect synchronization interval needed.
+ * - 32 bit counter supports times up to greater than 1.5 months with 1 ms resolution.
+ * - 32 bit compare value to support interrupt intervals of 1 second up to greater than 1 hour with 1 second resolution.
+ * - RTC interrupt with interrupt enable.
+ * - Counter runs in all modes of operation.
+ * - RTC status and control register are reset only by POR
+ * - RTC counter is reset when counter is disabled by software and by POR.
+ * - Autonomous periodic interrupt support includes:
+ * - 32 bit compare value to support wakeup intervals of 1.0 ms to 1 second
+ * - Wakeup logic has separate enable to support changing compare value while RTC running
+ * - API interrupt with interrupt enable
+ * - Operates in all modes of operation
+ * - API compare value can be modified while RTC is running
+ * - Optional interrupt for RTC match, API match, and RTC rollover.
+ * 
+ * ## How to use the RTC driver in your application ##
+ * In order to be able to use the RTC in your application, the first thing to do is
+ * initializing it with the desired configuration. This is done by calling the <b>RTC_DRV_Init</b>
+ * function. One of the arguments passed to this function is the configuration which will be
+ * used for the RTC instance, specified by the <b>rtc_init_config_t</b> structure.
+ * 
+ * The <b>rtc_init_config_t</b> structure allows you to configure the following:
+ *     -   RTC clock source 
+ *     -   Divide by 512 - divide input clock by 512 
+ *     -   Divide by 32 - divide input clock by 32
+ *     -   Freeze enable - enable freezing the counter when the CPU is in debug mode
+ *     -   Enable non supervisor writes to the registers
+ *     
+ * In alarm is configured with <b>rtc_alarm_config_t</b> structure, which is described by the following 
+ * parameters:
+ *     -   Alarm time in date-time format
+ *     -   Interval of alarm repeat in seconds
+ *     -   Number of alarm repeats (use 0 if the alarm is not recursive)
+ *     -   Repeat forever field (if set, the number of repeats field will be ignored)
+ *     -   Alarm interrupt enable
+ *     -   Alarm interrupt handler
+ *     -   Alarm interrupt handler parameters
+ *     
+ * <b>Note</b> If the alarm interrupt is not enabled, the user must make the updates of the alarm time manually.
+ * 
+ * After the \b RTC_DRV_Init call and, if needed, alarm and other configurations the RTC counter is started by calling RTC_DRV_StartCounter, with start time as parameter in 
+ * <b>rtc_timedate_t</b> format.
+ * 
+ * To get the current time and date you can call \b RTC_DRV_GetCurrentTimeDate function, this method will get the ticks from the module and 
+ * will convert into human readable format as rtc_timedate_t.
+ *  
+ * ### Example ###
+ * <p>
+ * @code  
+ * void rtcAlarmCallback(void)
+ * {
+ *     rtc_timedate_t currentTime;
+ *     RTC_DRV_GetCurrentTimeDate(0U, &currentTime);
+ *     
+ *     /* Do something with the time and date */
+ * }
+ * 
+ * int main()
+ * {
+ *     /* Driver state structure */
+ *	   rtc_state_t rtcState;
+ *     
+ *	   /* rtcTimer1 configuration structure */
+ *     rtc_init_config_t rtcTimer1_Config0 = 
+ *     {
+ *         /* Counter Clock Source is XOSC */
+ *         .clockSelect                =   RTC_CLOCK_SOURCE_XOSC, 
+ *         /* Divide by 32 of the input clock is disabled */
+ *         .divideBy32                 =   false,
+ *         /* Divide by 512 of the input clock is disabled */
+ *         .divideBy512                =   false,
+ *         /* Counter continues to run when the chip is in debug */
+ *         .freezeEnable               =   false,
+ *         /* Non-supervisor mode write accesses are not supported and generate 
+ *          * a bus error.
+ *          */
+ *         .nonSupervisorAccessEnable  =   false
+ *     };
+ * 
+ *     /* RTC Initial Time and Date */
+ *     rtc_timedate_t       rtcStartTime =
+ *     {
+ *         /* Year */
+ *         .year       =   2017U,
+ *         /* Month */
+ *         .month      =   01U,
+ *         /* Day */
+ *         .day        =   01U,
+ *         /* Hour */
+ *         .hour       =   00U,
+ *         /* Minutes */
+ *         .minutes    =   00U,
+ *         /* Seconds */
+ *         .seconds    =   00U
+ *     };
+ * 
+ *     /* rtcTimer1 Alarm configuration 0 */
+ *     rtc_alarm_config_t   alarmConfig0 = 
+ *     {
+ *         /* Alarm Date */
+ *         .alarmTime           =  
+ *         {
+ *             /* Year    */
+ *             .year       =  2017U,
+ *             /* Month   */
+ *             .month      =  01U,
+ *             /* Day     */
+ *             .day        =  01U,
+ *             /* Hour    */
+ *             .hour       =  00U,
+ *             /* Minutes */
+ *             .minutes    =  00U,
+ *             /* Seconds */
+ *             .seconds    =  03U,
+ *         },
+ *             
+ *         /* Alarm repeat interval */
+ *         .repetitionInterval  =       3UL,
+ *             
+ *         /* Number of alarm repeats */
+ *         .numberOfRepeats     =       0UL,
+ *         
+ *         /* Repeat alarm forever */
+ *         .repeatForever       =       true,   
+ * 
+ *         /* Alarm interrupt disabled */
+ *         .alarmIntEnable      =      true,
+ *         
+ *         /* Alarm interrupt handler */
+ *         .alarmCallback       =     (void *)rtcAlarmCallback,
+ *         
+ *         /* Alarm interrupt handler parameters */
+ *         .callbackParams      =     (void *)NULL
+ *     };
+ * 
+ *     /* Call the initialization function */
+ *     RTC_DRV_Init(0UL, &rtcState, &rtcInitConfig);
+ * 
+ *     /* Set the time and date */
+ *     RTC_DRV_SetTimeDate(0UL, &rtcStartTime);
+ *     
+ *     /* Start RTC counter */
+ *     RTC_DRV_StartCounter(0UL);
+ * 
+ *     /* Configure an alarm every 3 seconds */
+ *     RTC_DRV_ConfigureAlarm(0UL, &rtcAlarmConfig0);
+ * 
+ *     while(1);
+ * }
+ * @endcode
+ * </p> 
+ *
+ *
+ * ### Important Notes ###
+ * <p>
+ *   - Before using the RTC driver the module clock must be configured
+ *   - The driver enables the interrupts for the corresponding RTC module, but any interrupt priority 
+ *     must be done by the application
+ *   - RTC_DRV_ConfigureAlarm can return STATUS_BUSY, in this case the user need to check the timer synchronization
+ *     with help of RTC_DRV_IsSyncRTCVAL, if want to set a new alarm until the timer will not be synchronized.
+ *   - Wait times to RTCVAL to be synchronized based on ClockSource and Divider   
+ *   CLOCK SOURCE(FREQ)|DIV512|DIV 32| TIME TO SYNC(MS)
+ *   ------------------|------|------|----------
+ *   SXOSC(32 KHz)     | 1    | 0    |  83
+ *   SXOSC(32 KHz)     | 0    | 1    |  1
+ *   SXOSC(32 KHz)     | 1    | 1    |  3050
+ *   SIRC(128 KHz)     | 0    | 1    |  0.5
+ *   SIRC(128 KHz)     | 1    | 0    |  12
+ *   SIRC(128 KHz)     | 1    | 1    |  751
+ *   
+ *   
+ * </p>
+ * 
+ * ## Integration guideline ##
+ * 
+ * ### Compilation units ###
+ * 
+ * The following files need to be compiled in the project:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\src\rtc_api\rtc_api_driver.c
+ * ${S32SDK_PATH}\platform\drivers\src\rtc_api\rtc_api_hw_access.c
+ * ${S32SDK_PATH}\platform\drivers\src\rtc_api\rtc_api_irq.c
+ * \endverbatim
+ * 
+ * ### Include path ###
+ * 
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\inc\
+ * \endverbatim
+ * 
+ * ### Preprocessor symbols ###
+ * 
+ * No special symbols are required for this component
+ * 
+ * ### Dependencies ###
+ * 
+ * -# \ref clock_manager
+ * -# \ref interrupt_manager 
+ @}
+ */

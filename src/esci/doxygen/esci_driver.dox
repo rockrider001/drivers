@@ -1,0 +1,210 @@
+/*!
+@defgroup esci Enhanced Serial Communication Interface (eSCI)
+The S32 SDK provides the driver for Enhanced Serial Communication Interface.
+@n It allows asynchronous serial communication with peripheral devices and other CPUs.
+@n
+
+@n
+## Features ##
+- Full-duplex operation
+- Standard mark/space non-return-to-zero (NRZ) data format
+- Configurable 13 bit baud rate
+- Programmable frame format
+- Interrupt based and DMA based communication
+- Blocking and non-blocking transmit and receive functions
+- Hardware parity generation and checking with programmable even or odd parity
+- Programmable polarity of RXD pin
+
+@n
+## Important Notes ##
+<p>
+  - The clock module and board specific configurations (for example, the RX/TX pins
+    which must be configured by the application) must be done prior to driver calls.
+  - The driver enables the interrupts for the corresponding ESCI module instance, but any interrupt prioritization
+    must be done by the application.
+  - DMA module must be initialized prior to ESCI usage in DMA mode and the DMA channels need to be allocated
+    for ESCI usage by the application. (The driver only takes care of configuring the DMA channels received in
+    the configuration structure)
+  - When using DMA mode, the driver only supports transmission and reception of 8-bit characters and
+    transmission of 7-bit characters. Reception for 7-bit characters will also work, but every byte from the
+    received buffer will contain a parity bit in the MSB position. The user will need to manually check and/or
+    remove this bit.
+  - The driver supports the ESCI receiver to work only in Normal Operation mode, the Wake-Up Operation Mode is not supported.
+    Setting the receiver wake-up conditions (Idle-Line Wake Up/Address-Mark Wake Up mode) is not fully supported.
+    As a consequence, using a frame format with the address bit enabled will not have any impact.
+</p>
+
+@n
+## Driver Usage ##
+
+### Driver initialization ###
+<p>
+    In order to use the ESCI driver it must be first initialized using ESCI_DRV_Init() function.
+    Once initialized it cannot be initialized again for the same ESCI module instance until it is
+    de-initialized using ESCI_DRV_Deinit().
+</p>
+
+<p>
+    Note: the driver is considered initialized even if the ESCI_DRV_Init() method returned STATUS_ERROR.
+    The user needs to call ESCI_DRV_Deinit() before trying to ESCI_DRV_Init() with a new configuration.
+</p>
+
+<p>
+    The initialization function does the following operations:
+    - initial setup for the transmitter and receiver
+    - initializes the state structure for the current instance
+    - configures the baud rate value and frame format used
+    - enables interrupt requests
+    - configures RXD pin polarity
+</p>
+
+<p>
+Application initialization code example:
+@code
+/* Initialize clock */
+CLOCK_SYS_Init(g_clockManConfigsArr, CLOCK_MANAGER_CONFIG_CNT,
+                g_clockManCallbacksArr, CLOCK_MANAGER_CALLBACK_CNT);
+CLOCK_SYS_UpdateConfiguration(0U, CLOCK_MANAGER_POLICY_AGREEMENT);
+
+/* Initialize pins */
+PINS_DRV_Init(NUM_OF_CONFIGURED_PINS, g_pin_mux_InitConfigArr);
+
+/* Initialize DMA */
+EDMA_DRV_Init(&dmaController1_State, &dmaController1_InitConfig0, edmaChnStateArray, edmaChnConfigArray, EDMA_CONFIGURED_CHANNELS_COUNT);
+
+/* Initialize ESCI */
+ESCI_DRV_Init(INST_ESCI1, &esci1_InitConfig0, &esci1State);
+@endcode
+</p>
+
+### Driver usage with multiple instances ###
+<p>
+    The ESCI peripheral can run in full duplex mode. A single instance is able to use both the transmitter and
+    the receiver at the same time. Different ESCI module instances can function independently of each other.
+</p>
+
+### Interrupt-based communication ###
+<p>
+    After initialization, a serial communication can be triggered by calling ESCI_DRV_Send() function. This
+    will save the reference of the data buffer received as parameter in the internal transmitter buffer pointer.
+    The transmitter will copy one word from the buffer each time a 'Transmit buffer empty' interrupt is triggered.
+</p>
+
+<p>
+    Data reception is triggered by calling ESCI_DRV_Receive() function. The driver works similarly
+    as the transmitter counterpart.
+</p>
+
+### DMA-based communication ###
+<p>
+    The peripheral supports DMA-based communication. In this mode, the DMA module will deliver the information
+    to and from the data registers. The DMA driver must be previously initialized and configured with the correct
+    channels for the ESCI peripheral instance.
+</p>
+
+### Non-blocking send and receive operations ###
+<p>
+    The ESCI_DRV_Send and ESCI_DRV_Receive methods are non-blocking. This means they only schedule the transfers
+    and return immediately letting the application execute other code in the meantime. The status of the
+    send or receive operations can be checked using the ESCI_DRV_GetSendStatus and ESCI_DRV_GetReceiveStatus
+    methods.
+</p>
+@code
+/* Schedule a send operation */
+ESCI_DRV_Send(INST_ESCI1, ESCI_SEND_DATA, sendBuf, BUFFER_SIZE);
+
+/* Do other work in the meantime */
+otherWork();
+
+/* Wait for the transfer to finish */
+while (ESCI_DRV_GetSendStatus(INST_ESCI1, &remainCount) == STATUS_BUSY) {}
+
+/* Do some work if the transfer was successful */
+if (ESCI_DRV_GetSendStatus(INST_ESCI1, &remainCount) == STATUS_SUCCESS)
+{
+    someWork();
+}
+@endcode
+
+### Blocking send and receive operations ###
+<p>
+    The driver also features blocking methods: ESCI_DRV_SendBlocking and ESCI_DRV_ReceiveBlocking. These
+    use semaphores from OSIF module to wait for the end of the operation. Using these methods guarantees
+    that the send or receive operation is finished when the method call returns.
+</p>
+@code
+/* Start a blocking send operation */
+ESCI_DRV_SendBlocking(INST_ESCI1, ESCI_SEND_DATA, sendBuf, BUFFER_SIZE, 10000u);
+
+/* Do some work if the transfer was successful */
+if (ESCI_DRV_GetSendStatus(INST_ESCI1, &remainCount) == STATUS_SUCCESS)
+{
+    someWork();
+}
+@endcode
+### Callbacks ###
+<p>
+    The driver allows the user to install callback methods for asynchronous transfers using the
+    ESCI_DRV_InstallTxCallback() for transmission related events and ESCI_DRV_InstallRxCallback()
+    for reception related events.
+    The installed methods will be called each time a send (or receive) operation is completed or for example,
+    if an error occurs. The user can use the callbacks and the ESCI_DRV_SetTxBuffer / ESCI_DRV_SetRxBuffer methods to achieve continuous
+    transmission. An example using a general TX/RX callback that does this can be found below:
+</p>
+@code
+void esciCallback(void * esciState, const uart_event_t eventType, void * parameter)
+{
+    switch(eventType)
+    {
+        case UART_EVENT_RX_FULL:
+            ESCI_DRV_SetRxBuffer(INST_ESCI1, recvBuf, recvBufSize);
+        break;
+        case UART_EVENT_TX_EMPTY:
+            ESCI_DRV_SetTxBuffer(INST_ESCI1, sendBuf, sendBufSize);
+        break;
+        case UART_EVENT_END_TRANSFER:
+        break;
+        case UART_EVENT_ERROR:
+            /* If an error has occurred turn on LED2 */
+            PINS_DRV_ClearPins(LED_PORT, (1U << LED_PIN_2));
+        break;
+        default:
+        break;
+    }
+}
+@endcode
+
+@n
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\esci\esci_driver.c
+${S32SDK_PATH}\platform\drivers\src\esci\esci_irq.c
+${S32SDK_PATH}\platform\drivers\src\esci\esci_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+\ref clock_manager
+\ref interrupt_manager
+\ref edma
+\ref osif
+
+@defgroup esci_driver eSCI Driver
+@ingroup esci
+@brief eSCI Driver API
+*/

@@ -1,0 +1,91 @@
+/**
+@defgroup linflexd_uart Universal Asynchronous Receiver-Transmitter (UART) over LINFlexD Peripheral
+@brief The S32 SDK provides Peripheral Driver for the Universal Asynchronous Receiver-Transmitter (UART) 
+functionality of the LINFlexD module.
+@n
+The LINFLEXD_UART driver is used for serial communication. These sections describe the S32 SDK software modules API that 
+can be used for initializing and configuring the module, as well as initiating serial communications using 
+both interrupt-based and DMA-based methods.
+
+@brief This module covers the functionality of the Universal Asynchronous Receiver-Transmitter (UART) 
+peripheral driver implemented on LINFlexD peripheral.
+<p>
+  The LINFLEXD_UART driver implements serial communication using the LINFlexD module.
+</p>
+  ## Features ##
+   - Interrupt/DMA based
+   - Provides blocking and non-blocking transmit and receive functions (with semaphores)
+   - Configurable baud rate
+   - 7/8/15/16 bits per word
+
+  ## Functionality ##
+<p>
+  In order to use the LINFLEXD_UART driver, it must be initialized first, using LINFLEXD_UART_DRV_Init() function.
+  Once initialized, it cannot be initialized again for the same LINFlexD instance until it is 
+  de-initialized, using LINFLEXD_UART_DRV_Deinit(). The initialization function does the following operations:
+    - sets the baud rate
+    - sets parity/bit count/stop bits count
+    - initializes the state structure for the current instance
+  Different LINFlexD module instances can function independently of each other.
+</p>
+
+  ### Interrupt-based communication ###
+<p>
+  After initialization, a serial communication can be triggered by calling LINFLEXD_UART_DRV_SendData function; this
+  will save the reference of the data buffer received as parameter in the internal tx buffer pointer, then copy 
+  the first byte(s) to the data register. The hw module then automatically shifts the data and triggers a
+  'Transmit buffer empty' interrupt when all bits are shifted. The drivers interrupt handler takes care of
+  transmitting the next byte in the buffer, by increasing the data pointer and decreasing the data size. The same
+  sequence of operations is executed until all bytes in the tx buffer have been transmitted.
+</p>
+<p>
+  Similarly, data reception is triggered by calling LINFLEXD_UART_DRV_ReceiveData function, passing the rx buffer as
+  parameter. When the hw module copies the received bits in the data register, the 'Receive buffer full' interrupt
+  is triggered; the driver irq handler reads the received byte, saves it in the rx buffer, then increments the 
+  data pointer and decrements the data size. This is repeated until all bytes are received.
+</p>
+<p>
+  The workflow applies to send/receive operations using blocking method (triggered by LINFLEXD_UART_DRV_SendDataBlocking
+  and LINFLEXD_UART_DRV_ReceiveDataBlocking), with the single difference that the send/receive function will not return 
+  until the send/receive operation is complete (all bytes are successfully transferred or a timeout occurred). The
+  timeout (in milliseconds) for the blocking method is passed as parameter by the user.
+</p>
+  ### DMA-based communication ###
+<p>
+  In DMA operation, both blocking and non-blocking transmission methods configure a DMA channel to copy data
+  from the buffer to the data register (for tx), or viceversa (for rx). The driver assumes the DMA channel is
+  already allocated and the proper requests are routed to it via DMAMUX. After configuring the DMA channel, the
+  driver enables DMA requests for rx/tx, then the DMA engine takes care of moving data to/from the data buffer.
+  Due to hw restrictions, LINFlexD-UART module is forced to FIFO mode when using DMA.
+</p>
+  ### Callbacks ###
+<p>
+  The driver provides callback notifications for asynchronous transfers. LINFLEXD_UART_DRV_InstallTxCallback function
+  can be used for installing a callback routine to be called when the transmission is finished. In interrupts mode,
+  the tx callback is called twice: first when the tx fifo becomes empty (no more data to be transmitted) - at this point
+  the application can call LINFLEXD_UART_DRV_SetTxBuffer inside the callback in order to provide more data, resulting
+  in a continuous transmission; if there is no more data to be transmitted, the callback is called again when the transmission
+  is complete (all the bytes have been shifted out on the line). The event parameter in the callback signature differentiates
+  these two calls - the values are UART_EVENT_TX_EMPTY and UART_EVENT_END_TRANSFER, respectively. Due to hw limitations,
+  in DMA mode the tx callback is called only once, when the fifo is empty (UART_EVENT_TX_EMPTY event).<br/>
+  Similarly, LINFLEXD_UART_DRV_InstallRxCallback installs a callback routine for reception. This callback is called
+  twice (UART_EVENT_RX_FULL and UART_EVENT_END_TRANSFER); if a new buffer is provided within the first callback call 
+  (LINFLEXD_UART_DRV_SetRxBuffer), the reception will continue without interruption.<br/>
+  LINFLEXD_UART_DRV_InstallErrorCallback installs a callback routine for error cases; the driver treats rx overrun and
+  framing errors. In case of an error detected during an ongoing reception, the transfer is aborted and the callback is
+  called with UART_EVENT_ERROR parameter.
+</p>
+  ## Important Notes ##
+<p>
+  - Before using the LINFLEXD_UART driver, the module clock must be configured
+  - The driver enables the interrupts for the corresponding LINFlexD module, but any interrupt prioritization
+    must be done by the application
+  - The board specific configurations must be done prior to driver calls; the driver has no influence on the
+    functionality of the rx/tx pins - they must be configured by application
+  - DMA module has to be initialized prior to LINFLEXD_UART usage in DMA mode; also, DMA channels need to be allocated
+    for LINFlexD usage by the application (the driver only takes care of configuring the DMA channels received in
+    the configuration structure)
+  - On MPC574xB/C/G platforms, when LINFlexD is in idle state the TX pins are set to high impedance; for correct driver
+    operation, pull-up function should be enabled for the TX pins.
+</p>
+*/

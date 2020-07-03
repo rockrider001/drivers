@@ -1,0 +1,10 @@
+/*!
+@defgroup sdadc Sigma Delta Analog-to-Digital Converter (SDADC)
+@ingroup sdadc
+@brief The Sigma-Delta Analog-to-Digital Converter (SDADC) digital interface block controls
+the on-chip SDADC and holds control and status registers accessible for application. It
+provides accurate conversion data for a wide range of applications.
+@details
+The S32 SDK provides Peripheral Drivers for the Sigma Delta Analog-to-Digital Converter (SDADC).
+
+*/

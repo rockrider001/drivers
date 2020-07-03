@@ -1,0 +1,78 @@
+/*!
+ * @defgroup sdadc_driver SDADC Driver
+ * @ingroup sdadc
+ * @brief Sigma Delta Analog-to-Digital Converter Peripheral Driver.
+ *
+ * ## Hardware background ##
+ * The SDADC is signed 16-bit data resolution SD converter. It provides all control information for operating mode
+ * selection (single-ended or differential), analog input gain, decimation rate, high-pass
+ * filter enable, etc.
+ *
+ * Features of the SDADC include:
+ *     - Maximum conversion speed: 333 ksps at 16 MHz
+ *     - up to 8 selectable external input sources
+ *     - Single-ended input or differential input mode of operation
+ *     - Programmable wraparound mechanism for both modes of operation
+ *     - Programmable gain for analog inputs
+ *     - Gain and offset calibration support using fixed bias for input terminals
+ *     - Software or hardware trigger
+ *
+ * ## Driver consideration ##
+ * The SDADC Driver provides access to all features, but not all need to be
+ * configured to use the SDADC.
+ * The user application can use the default for most settings, changing only
+ * what is necessary.
+ *
+ * The Driver uses 1 main structure for configuration. That is SDADC converter configuration structure.
+ * Use SDADC_DRV_GetConverterDefaultConfig() to initialize SDADC converter configuration
+ * structure and then update only the members which are of interest for the user.
+ *
+ * The Driver also includes support for configuring the external trigger input and DMA/Interrupt
+ * input gate controlled from a separate hardware module - System Integration Unit Lite2 (SIUL2).
+ *
+ *
+ * ## Interrupt handling ##
+ * The SDADC Driver in S32 SDK does not use interrupts internally. These can be
+ * defined by the user application.
+ * There are two ways to add an SDADC interrupt:
+ *  1. Using the weak symbols defined by start-up code. If the methods
+ *      <tt>SDADC<b>x</b>_Handler(void)</tt> (x denotes instance number) are not
+ *      defined, the linker uses a default ISR. An error will be generated if
+ *      methods with the same name are defined multiple times. This method works
+ *      regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM (S32 SDK behavior). To get
+ *      the ADC instance's interrupt number, use <tt>SDADC_DRV_GetInterruptNumber()</tt>.
+ *
+ * ## Clocking and pin configuration ##
+ * The ADC Driver does not handle clock setup(done by Clock Manager) or any kind of pin
+ * configuration (done by PinSettings module).The driver assumes that correct clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\src\sdadc\sdadc_driver.c
+ * \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\inc\
+ * \endverbatim
+ *
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ * \ref clock_manager
+ * \ref edma
+ *
+ */

@@ -1,0 +1,15 @@
+/**
+\page misra_violations MISRA Compliance
+<p>
+This section describes how the C55 Flash Driver addresses MISRA Compliance.
+</p><p>
+The C55 Flash Driver are implemented to be compliant with MISRA C 2012 are: 
+-	drivers sources( .c and .h) 
+-	main.c
+</p><p>
+Violations of MISRA C 2012 guidelines which remain not fixed, shall be documented as deviations at file level.
+</p><p>
+Other SW components included in the C55 Flash Driver which are not subject to MISRA C 2012 compliance: 
+-	demo_apps & driver examples
+</p>
+*/

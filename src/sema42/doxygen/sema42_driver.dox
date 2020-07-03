@@ -1,0 +1,30 @@
+/*!
+ *
+ * @defgroup sema42 Semaphores (SEMA42)
+ * @brief The S32 SDK provides the Peripheral Driver for the Semaphores (SEMA42) module of S32 SDK devices.
+ *
+ * ## Hardware background ##
+ * The SEMA42 is a memory-mapped module that provides robust hardware support
+ * needed in multi-core systems for implementing semaphores and provides a simple
+ * mechanism to achieve "lock and unlock" operations via a single write access. The
+ * hardware semaphore module provides hardware-enforced gates as well as other useful
+ * system functions related to the gating mechanisms.
+ *
+ * Module features:
+ * - Supports 16 hardware-enforced gates in a multi-processor configuration
+ * - Gates appear as an 16-entry byte-size array with read and write accesses.
+ * - Processors lock gates by writing "processor_number+1" to the appropriate
+ *   gate and must read back the gate value to verify the lock operation was
+ *   successful.
+ * - Once locked, the gate is unlocked by a write of zeroes from the locking processor.
+ * - The number of implemented gates is specified by a hardware configuration define.
+ * - Each hardware gate appears as a 16-state, 4-bit state machine.
+ *      - 16-state implementation
+ *      - Uses the logical bus master number as a reference attribute plus the specified
+ *        data patterns to validate all write operations.
+ *      - Once locked, the gate can (and must) be unlocked by a write of zeroes from
+ *        the locking processor.
+ * - Secure reset mechanisms are supported to clear the contents of individual gates,
+ *   as well as a clear_all capability.
+ *
+ */

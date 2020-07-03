@@ -1,0 +1,34 @@
+/*!
+@defgroup etimer Enhanced Motor Control Timer (ETIMER)
+@ingroup etimer
+@brief The Enhanced Motor Control Timer (ETIMER) is a complex multi-channel 16-bit timer module.
+The ETIMER is based on a 16 bit counter and supports: input capture, output compare, PWM (fixed or variable frequency),
+it can also be used quadrature decoder.
+
+The ETIMER module design includes these distinctive features:
+   - 16-bit counters/timers: Six.
+   - Count up/down.
+   - Counters are cascadable.
+   - Enhanced programmable up/down modulo counting.
+   - Max count rate equals peripheral clock/2 for external clocks.
+   - Max count rate equals peripheral clock for internal clocks.
+   - Count once or repeatedly.
+   - Counters are preloadable.
+   - Compare registers are preloadable.
+   - Counters can share available input pins.
+   - Separate prescaler for each counter.
+   - Each counter has capture and compare capability.
+   - Continuous and single shot capture for enhanced speed measurement.
+   - DMA support of capture registers and compare registers.
+   - optional 32-bit watchdog capability to detect stalled quadrature counting (might not be
+available on every eTimer module instance or every device).
+   - OFLAG comparison for safety critical applications.
+   - Programmable operation during debug mode and stop mode.
+   - Programmable input filter.
+   - Counting start can be synchronized across counters.
+
+@details
+The S32 SDK provides Peripheral Drivers for the Enhanced Motor Control Timer (ETIMER) module.
+Currently supported devices: MPC5744P, MPC5743P, MPC5742P, MPC5741P, S32R274, S32R372, S32S247TV.
+
+*/

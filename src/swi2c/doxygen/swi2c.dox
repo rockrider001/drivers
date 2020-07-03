@@ -1,0 +1,132 @@
+/*!
+  
+   @defgroup swi2c Software Inter Integrated Circuit (SWI2C) 
+   @brief Software Inter Integrated Circuit (SWI2C) 
+   <p>
+    The SWI2C driver allows communication on an I2C bus, using the GPIO pins.
+   </p>
+
+   ## How to use SWI2C ##
+<p>
+  SWI2C is using bit banging technique to create an I2C communication. User have to configure four GPIO pins before using
+  the swi2c driver. One pin is configured to represent SDA pin and is used for transferring data, one pin is configured to
+  represent SCL pin, pull-up resistors are needed for both lines. Another two pins are used to read the SDA and SCL lines 
+  and should be configured as inputs.
+  
+  The baud-rate can reach up to 91Kbps.
+ 
+<p>
+<p>
+  In order to use the SWI2C the GPIO pins should be configured accordingly and the driver must be first initialized using 
+  SWI2C_DRV_MasterInit().
+</p>
+
+<p>
+  SWI2C can be configured only in master mode and only use blocking transfers. The blocking functions are: 
+  SWI2C_MasterSendDataBlocking and SWI2C_MasterReceiveDataBlocking.
+</p>
+
+
+  ## Important Notes ##
+<p>
+  - The SWI2C transfers are done using bit banging technique.
+  - The SWI2C driver supports only master mode.  
+  - The SWI2C supports only blocking transfers.
+  - The SWI2C driver doesn't support multi-master mode.
+  - Detection of bus busy is not supported, but the driver can detect if SDA or SCL are routed to GND. 
+  - The maximum baud rate (over 90Kbps) was obtained using gcc compiler with -O1 compiler optimizations, system clock of 200Mhz and pull-up resistors of 2K each.  
+  - Baud rate depends on CPU frequency, optimizations, compiler, pull-up resistors that are used, so user should check the baud rate and timing 
+    of the SCL and SDA for his application.	The SDA and SCL timing can be configured using 'Baudrate counter'. To obtain a maximum baud rate this
+	parameters should be 0. Also the swi2c driver can't ensure a fix baud rate.  
+  
+</p>
+
+<b>Example of a transfer using the SWI2C master :</b>
+
+@code
+
+swi2c_pin_t sda1 = {
+    .port = PTC,
+    .pinNumber = 14,
+};
+
+swi2c_pin_t scl1 = {
+    .port = PTC,
+    .pinNumber = 10,
+};
+
+swi2c_pin_t readSDA1 = {
+    .port = PTE,
+    .pinNumber = 14
+};
+
+swi2c_pin_t readSCL1 = {
+    .port = PTE,
+    .pinNumber = 15
+};
+
+swi2c_master_user_config_t swi2cMasterConfig0 = {
+    .slaveAddress = 10U,
+    .baudRate = 100U,
+    .sdaPin = &sda1;
+    .sclPin = &scl1;
+    .sdaReadPin = &readSDA1;
+    .sclReadPin = &readSCL1;     
+};
+
+
+#define BUFFER_SIZE 16
+
+/* Initializing master Tx buffer */
+uint8_t masterTxBuffer[BUFFER_SIZE] = {0xA, 0xB, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE};
+
+int main(void){
+
+   /* Write your local variable definition here */
+    swi2c_master_state_t *master;
+
+    /* ... */
+
+    /* Initialize the SWI2C master module */
+    SWI2C_DRV_MasterInit(master, &swi2cMasterConfig0);
+
+   /* Master SWI2C module sends data blocking to I2C slave */
+   SWI2C_DRV_MasterSendDataBlocking(&master, masterTxBuffer, BUFFER_SIZE, true);
+   
+   /* Master reads data from the I2C slave */
+   SWI2C_DRV_MasterReceiveDataBlocking(&master, masterRxBuffer, BUFFER_SIZE, true);
+
+    /* ... */   
+    SWI2C_DRV_MasterDeinit(master);
+    
+}
+@endcode
+
+  ## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\swi2c\swi2c_driver.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+\ref clock_manager
+\ref interrupt_manager
+\ref PinSettings 
+
+*/
+

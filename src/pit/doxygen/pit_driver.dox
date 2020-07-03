@@ -1,0 +1,139 @@
+/*!
+ * @defgroup pit_drv PIT Driver
+ * @ingroup pit
+ * @brief Periodic Interrupt Timer Peripheral Driver.
+ *
+ * ## Hardware background ##
+ * The following table contains the hardware information between platforms
+ *         Feature          |MPC5748G|MPC5746C|MPC5744P|MPC5746R|MPC5777C|S32V234 |
+ * ------------------------:|:------:|:-------|:-------|:-------|:-------|:-------|
+ * Instance number          |   1    |   1    |   1    |   2    |   1    |   2    |
+ * Standard Channel number  |   16   |   16   |   4    |   8    |   4    |   6    |
+ * RTI channel number       |   1    |   1    |   0    |   1    |   1    |   0    |
+<p>
+ *
+ * ## Driver consideration ##
+ * The Driver uses structures for configuration. Each structure contains members
+ * that are specific to its respective functionality. There are \b pit_config_t
+ * and \b pit_channel_config_t.
+ *
+ * ## Interrupt handling ##
+ * Each PIT timer channel has a corresponding interrupt handler. The PIT Driver does not define interrupt handler internally.
+ * These interrupt handler methods can be defined by the user application.
+ * There are two ways to add an PIT interrupt handler:
+ *  1. Using the weak symbols defined by start-up code. if the methods
+ *      <tt>PIT<b>x</b>_Handler(void)</tt> (x denotes instance number) are not
+ *      defined, the linker use a default ISR. An error will be generated if
+ *      methods with the same name are defined multiple times. This method works
+ *      regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM.
+ *
+ * ## Clocking configuration ##
+ * The PIT Driver does not handle clock setup (from MC_ME) configuration. This is handled by the Clock Manager. The driver assumes that clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ *
+ * ## Basic operations ##
+ * 1. Pre-Initialization information of PIT module
+ *   - Before using the PIT driver, the protocol clock of the module must be configured by the application using MC_ME
+ *     module.
+ *   - Configures different peripherals if want to use them in PIT interrupt routine.
+ *   - Provides configuration data structure to PIT initialization API.
+
+ * 2. To initialize the PIT module, just call the PIT_DRV_Init() function with the user configuration data structure.
+ *     This function configures PIT module operation when MCU enters DEBUG mode and enables PIT module. This function must be called firstly.@n
+ *     In the following code, PIT module is initialized to continue to run when MCU enters Debug modes.
+  ~~~~~{.c}
+ *     #define BOARD_PIT_INSTANCE 0U
+ *     /* PIT module configuration stucture */
+ *     pit_config_t pitconfig =
+ *     {
+ *         .enableStandardTimers = true,
+ *         .enableRTITimer  = true,
+ *         .stopRunInDebug = false
+ *     };
+ *     /* Initializes the PIT module. */
+ *     PIT_DRV_Init(BOARD_PIT_INSTANCE, &pitconfig);
+  ~~~~~
+ *
+ * 3. After calling the PIT_DRV_Init() function, call PIT_DRV_InitChannel() function with user channel configuration
+ *     structure to initialize timer channel.@n
+ *     This function configures timer channel chaining, timer channel period, interrupt generation.
+ *     In the following code, timer channel is initialized with the channel chaining is disabled, interrupt generation
+ *     is enabled and period is 1 second.
+  ~~~~~{.c}
+ *     /* Channel 0 configuration structure */
+ *     pit_channel_config_t chnlconfig =
+ *     {
+ *         .hwChannel = 0U,
+ *         .periodUnit = PIT_PERIOD_UNITS_MICROSECONDS,
+ *         .period = 1000000U,
+ *         .enableChain = false,
+ *         .enableInterrupt = true
+ *     };
+ *     /* Initializes the channel 0 */
+ *     PIT_DRV_InitChannel(BOARD_PIT_INSTANCE, &chnlconfig);
+  ~~~~~
+ *
+ * 4. To reconfigure timer channel period , just call PIT_DRV_SetTimerPeriodByUs() or PIT_DRV_SetTimerPeriodByCount()
+ *     with corresponding new period.
+ *     In the following code, the timer channel period is reconfigured with new period in count unit.
+  ~~~~~{.c}
+ *     /* Reconfigures timer channel period with new period of 10000 count*/
+ *     PIT_DRV_SetTimerPeriodByCount(BOARD_PIT_INSTANCE, 0, 10000);
+  ~~~~~
+ *
+ * 5. To start timer channel counting, just call PIT_DRV_StartChannel() with timer channels starting mask.
+ *     In the following code, the timer channel 0 is started.
+  ~~~~~{.c}
+ *     /* Starts channel 0 counting*/
+ *     PIT_DRV_StartChannel(BOARD_PIT_INSTANCE, 0U);
+  ~~~~~
+ *
+ * 6. To stop timer channel counting, just call PIT_DRV_StopChannel() with timer channels stopping mask.
+ *     In the following code, the timer channel 0 is stopped.
+  ~~~~~{.c}
+ *     /* Stops channel 0 counting*/
+ *     PIT_DRV_StopChannel(BOARD_PIT_INSTANCE, 0U);
+  ~~~~~
+ *
+ * 7. To disable PIT module, just call PIT_DRV_Deinit().
+  ~~~~~{.c}
+ *     /* Disables PIT module*/
+ *     PIT_DRV_Deinit(BOARD_PIT_INSTANCE);
+  ~~~~~
+ *
+ * ## OSIF and FReeRTOS ##
+ * Because the OSIF and FreeRTOS use the one channel of PIT for timing function, when using both OSIF/FreeRTOS and PIT driver in application, the user should note that:
+ *  - The OSIF and FreeRTOS will be impacted if calling the PIT_DRV_Deinit function.
+ *  - The OSIF and FreeRTOS may be impacted if calling the configuration channel functions with the configured channel is the channel which be used by OSIF and FreeRTOS.
+ *    For details on which channels are used, please refer to the OSIF documentation .
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\src\pit\pit_driver.c
+ * ${S32SDK_PATH}\platform\drivers\src\pit\pit_hw_access.c
+ * \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\inc\
+ * \endverbatim
+ *
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ * \b Common:
+ * \ref clock_manager
+ * \ref interrupt_manager
+ */

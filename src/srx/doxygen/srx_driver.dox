@@ -1,0 +1,149 @@
+/*!
+    @defgroup srx Single Edge Nibble Transmission Receiver (SENT_RX, SRX)
+    @brief Single Edge Nibble Transmission Receiver (SENT_RX, SRX) Peripheral Driver
+    <p>
+        The SRX driver allows reception of messages on the SENT bus.
+    </p>
+     ## Features ##
+    - Support for the reception of Fast and Slow SENT messages.
+    - Polled, Interrupt or DMA driven transfers.
+    - Configurable FIFO mode for Fast messages.
+    - Configurable number of nibbles.
+    - Support for standard or extended Slow messages.
+    - Support for standard diagnostics events.
+    - Configurable tick duration.
+    <p>
+        In order to use the SRX driver, it must be first initialized using the SRX_DRV_Init function.
+        Once initalized, it must be deinitialized with SRX_DRV_Deinit before any configuration 
+        settings are to be changed. Different SRX module instances can be configured independently.
+    </p>
+    <p>
+        The driver can be used in multiple modes, the choice betwen modes is made through data 
+        passed in the configuration structure. Or by changing the callbacks function during runtime by use of the
+        "SRX_DRV_SetRxCallback" function.
+        The folloing cases are possible:
+    </p>    
+        ## Modes ##
+        - Polled mode:
+        <p>
+            This is entered as long as no notification function is provided and DMA activation
+            flags are disabled for the given channel. In this mode the aplication shall poll any
+            incoming data available flags, then read the data.
+ 
+            ## Polling functions ##
+            - Polling for data availability
+            <p>
+                bool SRX_DRV_GetFastRxStatus(uint32_t instance, uint32_t channel);
+                bool SRX_DRV_GetSlowRxStatus(uint32_t instance, uint32_t channel);
+            </p>
+            
+            - Getting the actual messages
+            <p>
+                status_t SRX_DRV_GetFastMsg(uint32_t instance, uint32_t channel, srx_fast_msg_t * message);
+                status_t SRX_DRV_GetSlowMsg(uint32_t instance, uint32_t channel, srx_slow_msg_t * message);
+            </p>
+            
+            - Getting the diagnostics event flags
+            <p>
+                status_t SRX_DRV_GetEvents(uint32_t instance, uint32_t channel, srx_event_t * events)
+            </p>
+        </p>    
+        - Interrupt mode:
+        <p>
+            This is entered as long as a notification funtion is provided and DMA activation 
+            flags are disabled for the given channel. The driver will call the notification function
+            back to the application with flags indicating the event that occured. The application
+            should read the data when the notification comes. Same functions used in the polling mode should be used to get the data.
+            For example:
+            
+            ## Notification functions ##
+            - Getting the actual messages
+            <p>
+            	case SRX_CALLBACK_SLOW_RX_COMPLETE:
+                    SRX_DRV_GetSlowMsg(instance, channel, &slowMessage);
+                    break;
+
+                case SRX_CALLBACK_FAST_RX_COMPLETE:
+                    SRX_DRV_GetFastMsg(instance, channel, &fastMessage);
+                    break;
+            </p>
+            
+            - Getting the diagnostics event flags
+            <p>
+                case SRX_CALLBACK_RX_ERROR:
+                    SRX_DRV_GetEvents(instance, channel, &activeEvents);
+                    break;   
+            </p> 
+        </p>
+        - DMA mode:
+        <p>
+            This is active as long as DMA activation flags are enabled for the given channels. In this mode,
+            based on the given configuration, the peripheral will transfer the data to the given buffers.
+            This mode will also call the notification function (if provided) with a suitable event flag.   
+        </p>
+    ## Important Notes ###    
+    </p>
+        - The driver configures interrupt states, but the interrupt priority should be set by the application.
+    <p>
+    </p>
+        The driver uses the interrupt manager and the DMA peripheral as shared resources. 
+        These should be configured and initialized before the driver.
+    <p>
+	<p>
+		In MPC574xP devices, SENT module has errata e7204. "Number of Expected Edges Error status flag spuriously set when
+		operating with Option 1 of the Successive Calibration Check method". For this errata, possible workarounds are to be
+		implemented in the application software, and they consist of the following actions:
+			- Sensor should be enabled before the peripheral driver (i.e. power or output enabling). This means that first transmitted message wil not be received.
+			- Ignore the error at startup.
+		This issue should be taken care of when using the SENT module.
+	</p>
+    ## Example code ###
+    @code
+    srx_state_t srxState;
+    srx_event_t activeEvents;
+    srx_raw_msg_t fastMessageBuffer[32];
+    srx_raw_msg_t slowMessageBuffer;
+    srx_fast_msg_t fastMessage;
+    srx_slow_msg_t slowMessage;
+
+    void srxNotification(uint32_t instance, uint32_t channel, srx_callback_type_t type, void * param)
+    {
+        switch(type)
+        {
+        case SRX_CALLBACK_SLOW_DMA_RX_COMPLETE:
+            break;
+
+        case SRX_CALLBACK_FAST_DMA_RX_COMPLETE:
+            break;
+
+        case SRX_CALLBACK_SLOW_RX_COMPLETE:
+            SRX_DRV_GetSlowMsg(instance, channel, &slowMessage);
+            break;
+
+        case SRX_CALLBACK_FAST_RX_COMPLETE:
+            SRX_DRV_GetFastMsg(instance, channel, &fastMessage);
+            break;
+
+        case SRX_CALLBACK_RX_ERROR:
+            SRX_DRV_GetEvents(instance, channel, &activeEvents);
+            break;
+
+        default:
+            break;
+        }
+    }
+    
+    srx_driver_user_config_t def_cfg;
+    srx_channel_config_t def_chn_cfg;
+    def_cfg.channelConfig = &def_chn_cfg;
+    
+    SRX_DRV_GetDefaultConfig(&def_cfg);
+
+    void main(void)
+    {
+        SRX_DRV_Init(0, &driverConfig1, &srxState);
+        INT_SYS_EnableIRQGlobal();
+        while(1);
+    }     
+    @endcode
+@}*/

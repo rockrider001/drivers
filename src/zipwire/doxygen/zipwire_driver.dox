@@ -1,0 +1,193 @@
+/**
+@defgroup zipwire Zipwire
+@brief The S32 SDK provides Peripheral Driver for the Zipwire protocol.
+<p>
+## HW Overview ##
+Zipwire is a group of modules that allow one MCU to have a fast, low pin count, serial
+communication link directly into the memory mapped peripherals and/or memories of
+another MCU or a smart ASIC. Zipwire is implemented in hardware so there is no CPU
+load for the initiator or target nodes.
+Zipwire supports 8-bit, 16-bit or 32-bit reads and writes to any 32-bit address at the target
+node.<br/>
+Zipwire is composed of several modules and system resources.
+The physical layer is LVDS with 1.2 V common mode voltage and 200mV swing.
+The transport layer is a protocol called LFAST. LFAST is an asynchronous protocol,
+using a non-return to zero encoding.<br/>
+The application layer protocol is called Serial Inter Processor Interface (SIPI), which runs on
+top of LFAST and is fully encapsulated within the LFAST payload.
+The SIPI protocol implements a suite of commands initiated my one MCU, for reading
+and writing any 32-bit address location in another connected MCU. The SIPI protocol
+allows either or both MCUs to initiate commands. The protocol also supports interrupt
+requests from one MCU to the other. The module implements both the initiator and the recipient 
+part of the protocol.<br/>
+The module implements four SIPI Initiator channels that can run independently and simultaneously.
+The SIPI module is a bus master on the low speed
+crossbar. As the target MCU for a command from the initiating MCU, SIPI can perform
+read and write accesses to any address location within the target MCU. The software
+running on the local MCU, should configure the system MPU to allow/deny memory
+accesses to MCU memory and resources as required.<br/>
+</p>
+<p>
+## SDK Zipwire Driver ##
+### Overview ###
+The S32 SDK provides a peripheral driver for high speed communication between MCUs using Zipwire
+protocol. The driver implements an abstraction on top of SIPI and LFAST modules, managing both the
+physical interconnection between the two MCUs and the logical layer handling SIPI requests.<br/>
+The Zipwire driver provides both interrupt based and DMA based communication; in the DMA scenario,
+the driver requires two DMA channels, one for data and one for addresses - it is the application's
+responsibility to correctly allocate the DMA resources prior to calling the Zipwire DMA API.
+Callback functions can be installed through the configuration structures; there is one generic callback
+for the entire driver instance, as well as separate callbacks for each channel. If callback functions
+are present, the application will be notified whenever an interrupt event occurs (frame handling/errors).<br/>
+All the functions in the API take module instance as parameter; this encodes each pair of SIPI-LFAST
+hw IPs in the SoC; for platforms with just one zipwire interface, the instance parameter has to be 
+always zero.<br/>
+More in-depth description of the Zipwire driver API is provided in the following subsections.
+### Initialization ###
+A correct workflow requires driver initialization to be done before any other operation. The Zipwire
+driver is initialized by calling ZIPWIRE_DRV_Init() function; references to valid state and
+configuration structures need to be passed by the application.<br/>
+The Zipwire configuration structure contains different global settings for the SIPI module, the generic
+callback reference and a configuration structure for the LFAST module (please see \ref zipwire_config_t).
+The LFAST configuration structure defines the master/slave assignment and various timing parameters for
+the physical connection (please see \ref lfast_config_t), as well as a timeout value for the LFAST connection
+between the master and the slave to happen and a number of attempts for the master to enable the slave TX interface.
+The LFAST <b>syncTimeout</b> parameter is used for each master-slave synchronization step; it is an absolute 
+counter value that will decrement to zero as long as the required flags are not set - the actual time allowed 
+for the synchronization depends on the system clock configuration. A value of zero for <b>syncTimeout</b> parameter 
+is equivalent to infinite timeout - the driver will basically wait in an infinite busy waiting loop for 
+the other node to respond. The <b>syncAttempts</b> parameter describes the number of attempts for the master
+to turn on the slave TX interface - a value of zero is equivalent to an infinite number of attempts.
+<b>syncAttempts</b> is only used by the master node.<br/>
+
+@note If the two nodes are not synchronized at the application level, a recommended setup is to pass an 
+infinite synchronization timeout (0) for the slave (the slave waits indefinitely for the master commands)
+and a finite timeout with an infinite number of attempts for the master (master tries indefinitely to 
+connect to the slave, each attempt being timed-out after a short while).<br/>
+
+#### Default Configuration ####
+ZIPWIRE_DRV_GetDefaultConfig() function populates the structures passed by the application with default
+configuration values. It can be used to obtain a default configuration, especially when there is no
+configuration tool available. Please check the function description for the default configuration values.
+#### Channel Initialization ####
+After initializing the driver, prior to launching any transfer, one or more channels have to be initialized.
+This is done by calling ZIPWIRE_DRV_InitChannel(); the application must pass valid references to channel state 
+and configuration structures, as the driver does not allocate memory. The channel configuration specifies
+various parameters: physical channel number, DMA control and channels, error interrupts control, timeout and
+callbacks (please see \ref zipwire_chn_config_t). Once the channel is initialized, the rest of the driver
+API can be called for launching various transfers.
+#### De-initialization ####
+Once initialized, the driver/channel cannot be initialized again until de-initialized. ZIPWIRE_DRV_Deinit() function 
+is called for de-initializing the driver and ZIPWIRE_DRV_DeinitChannel() is called for de-initializing a channel. 
+It is recommended to call these functions when the zipwire operation is done, as they free the allocated hardware resources,
+disable the hw functionality and clear the internal driver references. ZIPWIRE_DRV_Deinit() calls
+ZIPWIRE_DRV_DeinitChannel() for all channels, so the a single call is enough to free all the resources.
+### Read/Write Transfers
+As specified in the SIPI module functional description, read/write transfers on 8/16/32 bits from/to the target
+node are supported. The zipwire driver provides API that implements all the described functionality in both
+interrupts and DMA modes. Also, these methods are available in both blocking and non-blocking modes; blocking
+functions do not return until the transfer is complete or an error occurs, whereas the non-blocking ones return 
+right after launching the transfer (application can poll the result of the previous transfer or can be notified 
+through a callback about the transfer status).
+#### Interrupts ####
+ZIPWIRE_DRV_Read() and ZIPWIRE_DRV_Write() functions implement the non-blocking read/write functionality using
+interrupts. These functions receive an array of transfer descriptor structures from the application and perform
+all the transfers subsequently. The transfer descriptor defines the transfer size, the target address for the transfer
+and the data. For read transfers data field is filled with the value read from the target, while for write transfers 
+data field holds the value to be written to the target. When each transfer is finished, an interrupt is generated and
+the driver internally takes care of moving the data (if needed) and launching the next transfer. Channel status is
+STATUS_BUSY until all the transfers described in the array are done, or an error occurs. Once the transfer is complete,
+if a callback is installed for the respective channel, the application will be notified with an appropriate event.
+#### DMA ####
+ZIPWIRE_DRV_ReadDma() and ZIPWIRE_DRV_WriteDma() functions implement non-blocking read/write functionality using
+DMA requests. These functions can only be called if DMA functionality has been enabled for the respective channel.
+Also, zipwire driver assumes the DMA channels have been correctly configured prior to using them; that is, the two
+DMA channels used for each zipwire channel are initialized and the appropriate requests are configured. For the data
+DMA channel, the hw request has to be the appropriate SIPI channel; for the address channel, there is no special
+requirement for the request, other than not being the same as the data channel request. The address channel will be 
+triggered by the data channel, hence it needs to be allocated for zipwire only, regardless of the hw 
+request routed to it.
+@note <b>For application coherency, it is recommended to use the 'NO_REQUEST' entry in DMAMUX for the address channel, where possible.</b><br/>
+The DMA read/write transfers take two arrays as parameters: one for addresses and one for data. The address array
+specifies which target addresses need to be read/written; the data array is either filled with data from the target 
+(read transfers) or holds the data to be written to the target (write transfers).<br/>
+
+@note <b>Only 32-bit transfers are allowed in DMA mode.</b><br/>
+
+Channel status is STATUS_BUSY until all the transfers described in the array are done, or an error occurs. 
+Once the transfer is complete, if a callback is installed for the respective channel, the application will be notified 
+with an appropriate event.
+#### Blocking API ####
+Read and write methods (both interrupts and DMA based) are also implemented in blocking mode (ZIPWIRE_DRV_ReadBlocking(),
+ZIPWIRE_DRV_WriteBlocking(), ZIPWIRE_DRV_ReadDmaBlocking(), ZIPWIRE_DRV_WriteBlocking()). The blocking functions have 
+mostly the same functionality, except that they don't return until the transfer is complete or an error occurs. 
+The blocking functions take an additional timeout parameter that configures the time (number of ms) 
+allowed for the transfer to finish; if the transfer is not complete within the allowed period, STATUS_TIMEOUT is returned.
+### Streaming Write Transfers
+Streaming write transfers, unlike regular write transfers, allow a greater payload of 256 bits. These values are written
+to the address stored in the <i>Address count register</i> of the target node. The zipwire driver covers this functionality
+in ZIPWIRE_DRV_StreamWrite() function. This function first sets the target ACR register using a normal write transfer, then
+launches a streaming write with the data provided in the <i>data</i> parameter. The address of the ACR register on the target
+has to be provided by the application. ZIPWIRE_DRV_StreamWrite() is implemented in blocking mode only, so a timeout has to 
+be passed as well.
+### Request ID
+Zipwire API covers the ID requests, as described in the SIPI functional description. ZIPWIRE_DRV_RequestId() function
+sends an ID request frame and waits for the response from the target. The target ID is copied in the <i>id</i> output parameter.
+The function is blocking, so a timeout has to be provided.
+### Trigger Command
+Trigger commands can be sent using ZIPWIRE_DRV_Trigger() function. This function sends a trigger request frame and waits for
+the acknowledgement from the target. A callback needs to be installed for the respective channel on the target node in order to
+treat the trigger from the initiator. ZIPWIRE_DRV_Trigger() is also blocking.
+### Status Polling ###
+ZIPWIRE_DRV_GetChannelStatus() function can be called after a non-blocking method is launched, to poll the status of the channel.
+The channel status is STATUS_BUSY as long as the transfer is ongoing. Once the transfer is finished, the status returned by this
+function describes the outcome of the previous transfer (STATUS_SUCCESS or an error specific status code).
+### Error Handling ###
+Zipwire driver allows configurable error handling, through the configuration structures. Globally, CRC error is always enabled, but
+maximum count reached interrupt can be enabled through the driver configuration structure. All the channel related errors are 
+configurable through the channel configuration structure (timeout error, ack error, transaction id error). The driver internally handles
+the error flags clearance and calls the appropriate callback (global/channel), if there is one. The application can handle specific
+errors through callbacks; the differentiation between various error events is done by checking the <i>event</i> parameter of the callback
+(please see \ref zipwire_event_t). The callbacks also receive an additional void pointer parameter which can be customized by the application,
+referring user data needed by the error handling procedure.
+</p>
+<p>
+## Important Notes ##
+- CLOCK enable:<br/>
+Before using the zipwire driver the clocks for LFAST and SIPI modules must be configured.<br/>
+- Interrupt Priority:<br/>
+The driver enables the SIPI module interrupts, but interrupt priority must be set by the application.<br/>
+- Pin muxing:<br/>
+The zipwire driver does not configure pins; the application must correctly route the zipwire signals to the appropriate pins.<br/>
+- DMA Configuration:<br/>
+The zipwire driver DMA functionality assumes correct initialization of DMA channels is done before calling any zipwire function using DMA requests.
+- RequestID command:<br/>
+The RequestID command does not start the timeout counter, thus timeout errors are not reported if no other command (read/write) has been launched before.
+</p>
+<p>
+## Integration Guideline ##
+ 
+### Compilation Units ###
+The following files need to be compiled in the project:
+\verbatim
+${S32KSDK_PATH}\platform\drivers\src\zipwire\zipwire_driver.c
+${S32KSDK_PATH}\platform\drivers\src\zipwire\zipwire_hw_access.c
+${S32KSDK_PATH}\platform\drivers\src\zipwire\sipi_irq.c
+\endverbatim
+
+### Include Path ###
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32KSDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor Symbols ###
+No special symbols are required for this component
+
+### Dependencies ###
+- \ref clock_manager
+- \ref interrupt_manager
+- \ref osif
+- \ref edma
+</p>
+*/

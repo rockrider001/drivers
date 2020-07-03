@@ -1,0 +1,219 @@
+/*!
+@defgroup wkpu Wakeup Unit (WKPU)
+@brief The S32 SDK provides Peripheral Drivers for the Wakeup Unit module.
+@details The Wakeup Unit (WKPU) supports external sources that can generate interrupts or wakeup events
+and external source(s) that can cause non-maskable interrupt request(s) or wakeup event(s). @n
+In addition, it combines its wakeup events with those generated from other wakeup sources
+to supply a single wakeup to the system. @n@n
+
+The WKPU supports these features: @n
+
+- Non-maskable Interrupt support with: @n
+   - External NMI sources. @n
+   - Analog glitch filters.
+
+- Independent interrupt destination for each core: @n
+   - Non-maskable interrupt. @n
+   - Critical interrupt. @n
+   - Machine check request.
+- Active edge selection control for events to each core.
+- Configurable system wakeup triggering from NMI source(s).
+
+External signal description
+- The WKPU has signal inputs that can be used as external interrupt sources in normal run mode
+or as system wakeup sources in certain power down modes.
+
+WKPU has 3 separate features to wakeup/interrupt:
+ - Use NMI.
+ - Use external interrupt.
+ - Reset request to MC_RGM.
+
+<b>Note</b>:
+ - MPC574xP supports the only NMI feature.
+ - S32V23x supports the only NMI feature using Non-maskable interrupt.
+
+# Integration guideline #
+
+## Compilation units ##
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\wkpu\wkpu_driver.c
+\endverbatim
+
+## Include path ##
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+## Preprocessor symbols ##
+
+No special symbols are required for this component
+
+## Dependencies ##
+
+- \ref clock_manager @n
+- \ref interrupt_manager @n
+
+# WKPU Driver Initialization/De-Initialization {#WKPUInit}
+
+In order to be able to use the wakeup in your application, the first thing to do is initializing it with
+user configuration input. Every feature will initializes with each init function: <b>WKPU_DRV_InitNMI()</b>,
+ <b>WKPU_DRV_InitInterrupt()</b> and <b>WKPU_DRV_InitReset()</b>. @n
+The <b>WKPU_DRV_DeinitNMI()</b>, <b>WKPU_DRV_DeinitInterrupt()</b>, <b>WKPU_DRV_DeinitReset()</b> shall be used
+ to de-initializes the WKPU module, disable IRQ and Wake-up, clear filter enable, pull-up enable, edge events enable.
+
+# WKPU Driver Operation {#WKPUOp}
+
+<i><b>NMI feature</i></b>
+
+The user must make sure that the NMI configuration must have configure for core 0,
+the filter only configured at this core, other cores will be ignored
+
+The <i>WKPU_DRV_GetNMIDefaultConfig()</i> shall be used to get NMI default configuration.
+Note: The user need provides an array have 3 elements of NMI configuration. @n
+
+The <i>WKPU_DRV_ClearNMIFlag()</i> shall be used to clear the NMI (status or overrun) flag for each core.
+
+<b><i>Interrupt feature</i></b>
+
+After WKPU initialization interrupt feature, the WKPU_DRV_SetInterruptNormalMode() shall be used to set normal mode,
+ when has a signal wakeup, hardware will set normal mode. @n
+
+<b>Note</b>: When using peripheral as source wakeup, pull feature of WKPU[25] and WKPU[26] should be disabled.
+
+The <i>WKPU_DRV_SetInterruptSleepMode()</i> shall be used to set sleep mode for the WKPU or disable wakeup interrupt. @n
+
+Otherwise: @n
+The user can use WKPU_DRV_SetInterruptConfig() and WKPU_DRV_ClearInterruptConfig() to set/clear the interrupt configuration. @n
+
+The <i>WKPU_DRV_GetInterruptDefaultConfig()</i> shall be used to get interrupt default configuration,
+Note: The user need provides an array have 32 elements of interrupt configuration. @n
+
+The <i>WKPU_DRV_SetInterruptEdgeEvent()</i> shall be used to set edge events for each channel of the WKPU. @n
+
+The <i>WKPU_DRV_ClearInterruptFlag()</i> shall be used to clear interrupt flag for channel mask.
+
+<b><i>Reset feature</i></b>s
+
+The <i>WKPU_DRV_SetResetConfig()</i> shall be used to set reset configuration of the WKPU. @n
+
+The <i>WKPU_DRV_ClearResetFlag()</i> shall be used to clear the reset (status or overrun) flag. @n@n
+
+<b>This is example code to configure the WKPU driver:</b>
+~~~~~{.c}
+/* Device instance number */
+#define INST_WKPU1          (0U)
+
+/* The number of channels */
+#define WKPU_CHANNEL_COUNT  (3U)
+
+/* The hardware channel */
+#define WKPU_HW_CHANNEL0    (0U)
+#define WKPU_HW_CHANNEL1    (1U)
+#define WKPU_HW_CHANNEL2    (2U)
+
+/* Configure for NMI feature */
+const wkpu_nmi_cfg_t wkpu1_NMICfg0[] =
+{
+    {
+        .core           = WKPU_CORE0,
+        .destinationSrc = WKPU_NMI_NON_MASK_INT,
+        .wkpReqEn       = true,
+        .filterEn       = true,
+        .edgeEvent      = WKPU_EDGE_RISING,
+        .lockEn         = false
+    },
+    {
+        .core           = WKPU_CORE1,
+        .destinationSrc = WKPU_NMI_CRITICAL_INT,
+        .wkpReqEn       = true,
+        .filterEn       = false,
+        .edgeEvent      = WKPU_EDGE_FALLING,
+        .lockEn         = true
+    },
+    {
+        .core           = WKPU_CORE2,
+        .destinationSrc = WKPU_NMI_MACHINE_CHK_REQ,
+        .wkpReqEn       = true,
+        .filterEn       = false,
+        .edgeEvent      = WKPU_EDGE_BOTH,
+        .lockEn         = false
+    }
+};
+
+/*! Configuration for interrupt feature */
+const wkpu_interrupt_cfg_t wkpu1_InterruptCfg0[] =
+{
+    {
+        .hwChannel = 0U,
+        .edgeEvent = WKPU_EDGE_NONE,
+        .filterEn  = false,
+        .pullEn    = false
+    },
+    {
+        .hwChannel = 1U,
+        .edgeEvent = WKPU_EDGE_RISING,
+        .filterEn  = true,
+        .pullEn    = true
+    },
+    {
+        .hwChannel = 2U,
+        .edgeEvent = WKPU_EDGE_NONE,
+        .filterEn  = false,
+        .pullEn    = false
+    }
+};
+
+/*! Configuration for Reset feature */
+const wkpu_reset_cfg_t wkpu1_ResetCfg0 =
+{
+    .destinationSrc = WKPU_RESET_REQ_RGM,
+    .wkpReqEn       = true,
+    .edgeEvent      = WKPU_EDGE_BOTH,
+    .lockEn         = false
+};
+
+/* Main */
+int main(void)
+{
+    /* Configure for STANDBY mode */
+
+    /* Initialize */
+    WKPU_DRV_InitInterrupt(INST_WKPU1, WKPU_CHANNEL_COUNT0, wkpu1_InterruptCfg0);
+    /* Set normal run mode for wake-up */
+    WKPU_DRV_SetInterruptNormalMode(INST_WKPU1, WKPU_HW_CHANNEL1);
+
+    /* Configure for wake-up address */
+
+    /* Initialize for external sources */
+
+    /* Enter STANDBY mode */
+
+    /* Loop forever */
+
+    return 0;
+}
+~~~~~
+
+<b><i> WKPU Driver Get default configuration</i></b>
+
+~~~~~{.c}
+    /* Declare an array variable have 32 elements for interrupt configuration */
+    wkpu_interrupt_cfg_t intCfg[32U];
+    /* Declare an array variable have 3 elements for NMI configuration */
+    wkpu_nmi_cfg_t nmiConfig[3U];
+    /* Declare a variable for Reset configuration */
+    wkpu_reset_cfg_t resetCfg;
+
+    /* Get Interrupt default configuration */
+    WKPU_DRV_GetInterruptDefaultConfig(&intCfg);
+    /* Get NMI default configuration */
+    WKPU_DRV_GetNMIDefaultConfig(&nmiConfig);
+    /* Get Reset default configuration */
+    WKPU_DRV_GetResetDefaultConfig(&resetCfg)
+~~~~~
+
+*/

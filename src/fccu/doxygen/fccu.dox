@@ -1,0 +1,365 @@
+/*!
+@defgroup fccu Fault Collection and Control Unit Module (FCCU)
+@brief The S32 SDK provides Peripheral Drivers for the Fault Collection and Control Unit Module (FCCU) module of S32 SDK devices.
+@details
+The Fault Collection and Control Unit Module (FCCU) provide a hardware channel to collect faults@n
+and to place the device into a safe state when a failure in the device is detected@n
+
+The FCCU includes these features: @n
+    - External reactions via configurable output EOUT pins.@n
+    - Configurable fault control.@n
+    - Configurable internal reactions for each NonCriticalFault:@n
+                        - No Reaction @n
+                        - Interrupt@n
+                        - Short functional Reset@n
+                        - Long functional Reset@n
+                        - NMI @n
+    - Watchdog timer for the reconfiguration phase@n
+    - Configuration lock@n
+    - Fault injection (fake faults)@n
+
+## Important note when use FCCU module: ##
+1. For \e 0N78S MaskSet MPC5748G devices:@n
+    In order to avoid disconnecting the debugger when the chip enters in fault mode you should
+    Enable the JTAG pads SMC bit - Fault state o/p buffer enable in SIUL Module, MSCR Registers.@n
+    The same applies for EOUT signal pads to if used.@n
+    Example Code for MPC5748G_BGA256 Motherboard:
+    @code/* Enable EOUT Pins PF[10] and PF[12] in SAFE MODE */
+    SIUL2->MSCR[90] |= SIUL2_MSCR_SMC(1);
+    SIUL2->MSCR[92] |= SIUL2_MSCR_SMC(1);
+
+    /* JTAG Pins Enable in SAFE MODE When Chip pass in SAFE MODE all Pads without SMC bit enabled will be disabled
+    * PC[0] -> TDI -> MSCR[32] */
+    SIUL2->MSCR[32] |= SIUL2_MSCR_SMC(1);
+    /* PC[1] -> TDO -> MSCR[33] */
+    SIUL2->MSCR[33] |= SIUL2_MSCR_SMC(1);
+    /* PH[9] -> TCLK -> MSCR[121] */
+    SIUL2->MSCR[121] |= SIUL2_MSCR_SMC(1);
+    /* PH[10] -> TMS -> MSCR[122] */
+    SIUL2->MSCR[122] |= SIUL2_MSCR_SMC(1);
+    @endcode
+2. For S32R274, S32R372, S32V234, MPC5777C and MPC5746R devices:@n
+    - The FOSU is to provide a secondary fault reaction path in most cases when the FCCU fails but not to needlessly
+      propagate a fault which is already handled by the FCCU in a full chip reset. Only a failed primary fault reaction(that is,
+      FCCU's failure) is a reason for the secondary reaction to take over(and generate a destructive reset request).@n
+    - FOSU does not check whether the reaction is the configured one for the faults which occurred the FCCU shows any of the
+      following reactions: @n
+        + Reset: Long or short functional reset @n
+        + IRQ: NMI or Alarm @n
+    - So when injection a fake fault for FCCU then use one of the configurations below(FOSU does not check whether the reaction
+      is the configured one for the faults which occurred): @n
+        + All faults should be configured one of the reactions.@n
+        + All faults do not configured any of the reactions(except S32V234 devices).@n
+    - When injecting a fake fault to transition FCCU from Normal to Alarm then to Fault, the time configured for Alarm to Fault transition must be lower than the FOSU time.
+      Otherwise, FOSU timeout might expire and it will trigger a CPU reset.
+3. For S32V234 devices:@n
+    To use NMI reaction on each NCF(Non critical fault) then must be enabled NMI from FCCU(The bit 31(FCCU NMI Disable for Cortex-M4)
+    in the General Purpose Register 16(SRC_GPR16) register is set to 0) via System Reset Controller (SRC) module.@n
+    Example code enabled NMI from FCCU for S32V234 device:
+    @code/* Enabled NMI from FCCU */
+    SRC_Type * const srcRegister[SRC_INSTANCE_COUNT] = SRC_BASE_PTRS;
+    /* Cleared bit FCCU_NMI_DIS */
+    srcRegister[0]->GPR16 = (srcRegister[0]->GPR16 & (~SRC_GPR16_FCCU_NMI_DIS_MASK));
+    @endcode
+4. For MPC5777C:
+    - The NCF 41 was present if Secondary core is disabled.@n
+    - The NCF 42 was present if Checker Core or RCCUs are disabled.@n
+    - The NCF 43 was present if Error Input Pin is pulled down to low signal level.@n
+5. For MPC5746R if EOUT ERRORx pads did not enable then user should be enable for it via Device Configuration Format (DCF) Records(Only configure once)
+   Detail refer section 1.2 Device Configuration Format (DCF) Records Reference Manual MPC5746RRMADRev. 2, 10/2016.
+   After that can be use PIN driver to configure for other fields and muxing select is 6U. @n
+6. For MPC5746R when FCCU enters debug mode, it halts operation and remains in the state it was in before it
+   entered debug mode if the debugger attached.
+
+Example Code enable EOUT pads for MPC5746R use Flash driver:@
+@code
+/* Define address to write to DCF memory(0x00400310 is the default DCF address for EOUT pins configuration.
+   In the case that DCF records are modified, then the record address can be different.) */
+#define LOW_BLOCK_ADDR 0x00400310
+/* The function write to flash */
+status_t Test_flash_program(uint32_t dest, uint32_t size, uint32_t source)
+{
+    status_t status;
+    flash_state_t T_opResult;
+    flash_context_data_t T_context_data;
+    uint32_t T_Time_Out = 50000U;
+    uint8_t *writtenContent, *desireContent;
+    uint8_t iCount = 0U;
+
+    status = FLASH_DRV_Program(&T_context_data, dest, size, source);
+
+    /* Wait for program operation is finished */
+    do
+    {
+        status = FLASH_DRV_CheckProgramStatus(&T_context_data, &T_opResult);
+    }while((status == STATUS_FLASH_INPROGRESS) && (T_Time_Out-- > 0));
+
+    /* Verify the written content */
+    writtenContent = (uint8_t*)dest;
+    desireContent = (uint8_t*)source;
+    for (iCount = 0U; iCount < size; iCount++)
+    {
+        if (writtenContent[iCount] != desireContent[iCount])
+        {
+            status = STATUS_ERROR;
+        }
+    }
+
+    return status;
+}
+
+/* Main function */
+int main(void)
+{
+    status ret = STATUS_ERROR;
+    uint32_t addr = LOW_BLOCK_ADDR;
+    uint8_t T_Data[] = {0x08, 0x09, 0x00, 0x0F, 0x02, 0x00, 0x00, 0xC0,0x08, 0x09, 0x00, 0x0E, 0x02, 0x00, 0x00, 0xE0};
+    uint32_t lockedBlockState = 0x00000000U;
+    uint32_t T_size = 16U;
+
+    /* Initializes the FLASH module */
+    ret = FLASH_DRV_Init();
+
+    /* Set the block in unlocked state */
+    ret = FLASH_DRV_SetLock(C55_BLOCK_UTEST, lockedBlockState);
+
+    /* Program the selected block in the flash memory */
+    ret = Test_flash_program(addr, T_size, (uint32_t)T_Data);
+}
+@endcode
+
+/*!
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\fccu\fccu_driver.c
+${S32SDK_PATH}\platform\drivers\src\fccu\fccu_hw_driver.c
+${S32SDK_PATH}\platform\drivers\src\fccu\fccu_irq.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+\ref clock_manager
+\ref interrupt_manager
+
+*/
+
+# FCCU Get default configuration {#FCCUGetDefaultConfig}
+
+The FCCU_DRV_GetDefaultConfig() shall be used to get default one non-critical fault and one control configuration:@n
+    - Non-critical fault ID default:@n
+        + fault ID default value is 2U, base on other derivatives maybe select fault injection(fake fault) suitable.@n
+        + Software recovery type.@n
+        + No reset.@n
+        + No reactions.@n
+        + No callbackIsr.@n
+    - Control configuration default:@n
+        + EOUT signal is active.@n
+        + EOUT control by FSM.@n
+        + No interrupt.@n
+        + Debug mode enable.@n
+        + No callback.@n
+
+# FCCU Driver Initialization {#FCCUInit}
+
+In order to be able to use the fault reporting in your application, the first thing to do is
+initializing it with user control configuration input, and NonCriticalFault configurations.
+ This is done by calling the <b>FCCU_DRV_Init</b> function.
+Note that: FunctionID takes values between 0 and the maximum faults count supported by the module. Check Chip RM.@n
+
+# FCCU Driver Driver Operation {#FCCUOp}
+
+After FCCU initialization, the FCCU_DRV_Init() will set interrupts based on interrupt configuration. @n
+
+The FCCU_DRV_IrqStatusGetEvent() shall be used to get the current interrupt configuration of the available events (which interrupts are enabled/disabled).
+    FCCU_DRV_IrqStatusSetEvent() shall clear the event by setting flag to #FCCU_ISR_NO.
+
+The FCCU_DRV_ReadFaults() shall be used to get the faults triggered.
+
+The FCCU_DRV_ClearFaults() shall be used to clear fault if the fault ID is less than #FEATURE_FCCU_CLEAR_ALL_FAULTS@n
+ or clear all if the fault ID is #FEATURE_FCCU_CLEAR_ALL_FAULTS. A time out mechanism is present in case of failing to clear all faults.
+ For MPC5777C: when call this function then fault 41 cannot clear if Safety core is disabled, fault 42 cannot clear if Checker core or RCCUs are disabled.
+
+The FCCU_DRV_SetNcfFake() shall be used to trigger fake faults to test the behaviour of configured ones.@n
+Check in Chip RM if your Fault source can be injected as fake !
+
+The FCCU_DRV_SetConfigState() shall be used to set FCCU Module in Configuration State, and if errors are triggered will clear them to force configuration state.
+A time out mechanism is present in case of failing.
+
+The FCCU_DRV_SetNormalState() shall be used to set the FCCU Module in Normal Run State, and if errors are triggered will clear them to force normal state.
+A time out mechanism is present in case of failing.
+
+The FCCU_DRV_GetConfigState() shall be used to determine the current state of the FCCU Module.
+The states of the module can be:@n
+    - Normal@n
+    - Configuration@n
+    - Alarm@n
+    - Fault @n
+
+
+The FCCU_DRV_GetFreezeStatus() will update and return freeze status events tracked by FCCU Module.
+
+The FCCU_DRV_ClearAllFreezeStatus() will clear all previous stored events tracked by FCCU Module. Exception FCCU_SCFS register on MPC5746R, the RCCx checkers
+must be disabled (FCCU_CFG.RCCEx = 00b) during a clear operation otherwise the RCCSx flags are asserted again.
+
+The FCCU_DRV_EoutSet() will update the external reactions and behaviour of EOUT signals.
+
+The FCCU_DRV_LockConfig() will lock the configuration, if permanent lock is used the FCCU Module can't be reconfigured.
+To exit permanent lock a chip reset is required.
+
+The FCCU_DRV_RunOperation()  function will feature support to individual run of operations on FCCU Module.@n
+Check chip RM for supported operations and a time out mechanism is present in case of failing !
+
+The FCCU_DRV_IrqAlarmCallback() in case of detected faults will trigger a callback function if is configured and if event detected #FCCU_ISR_IRQ_ALARM
+This function will be called if Fault is configured for AlarmIRQ !
+
+The FCCU_DRV_GetXtmrValue() will get the values for different timers as #fccu_xtmr_type_t
+
+# FCCU Driver DeInitialization {#FCCUDeinit}
+
+The FCCU_DRV_Deinit() will de-initialize the driver by setting in default mode and will clear all errors reported.
+
+The FCCU_DRV_DisableFault() will disable a fault number, and will set FCCU in Configuration Mode and return it to initial state.
+
+The FCCU_DRV_GetChipMode() will capture chip modes—as defined by the MC_ME module based on the last event selected to be captured.
+
+This is example code to configure the FCCU driver use configuration structure:
+~~~~~{.c}
+/*! @brief Device instance number */
+#define INST_FCCU1 0U
+
+/*! fccu1 configuration structure */
+/*! @brief Noncritical fault configuration 0 */
+/*! @brief Number 0 */
+fccu_config_ncf_t fccu1_NcfConfig0_0 =
+{
+    .functionID    = 7,
+    .hwSwRecovery  = FCCU_NCF_SW_REC_FAULT,
+    .reset         = FCCU_NCFS_SHORT_RESET,
+    .timeoutEnable = true,
+    .reactionType  = (1<<FCCU_INT_ALARM),
+    .callback      = NULL,
+    .callbackParam = NULL
+};
+/*! @brief Number 1 */
+const fccu_config_ncf_t fccu1_NcfConfig0_1 =
+{
+    .functionID    = 8,
+    .hwSwRecovery  = FCCU_NCF_SW_REC_FAULT,
+    .reset         = FCCU_NCFS_NO_RESET,
+    .timeoutEnable = true,
+    .reactionType  = ((1<<FCCU_INT_ALARM)|1<<FCCU_INT_EOUT),
+    .callback      = NULL,
+    .callbackParam = NULL
+};
+/*! @brief Configuration 0 */
+const fccu_config_ncf_t * fccu1_NcfConfig0[] =
+{
+    &fccu1_NcfConfig0_0,
+    &fccu1_NcfConfig0_1
+};
+
+/*! @brief EOUT configuration */
+/*! @brief Configuration 0 */
+const fccu_eout_config_t fccu1_EoutConfig0 =
+{
+    .toggleTime             = 102,
+    .activate               = true,
+    .control                = FCCU_FO_CONTROLLED_BY_FSM,
+    .extMode                = FCCU_FO_EXT_DEFAULT,
+    .openDrain              = false,
+    .switchMode             = false,
+    .mode                   = FCCU_FO_DUAL_RAIL,
+    .prescaler              = 127,
+    .phase                  = FCCU_FO_OPPOSITE_PHASE_10,
+    .polarity               = true,
+    .triggerTimeIRQDMA      = 0,
+    .deltaFaultInterval     = 16000
+};
+
+/*! @brief Control configuration */
+/*! @brief Configuration 0 */
+const fccu_control_t fccu1_Control0 =
+{
+    .filterBypass     = true,
+    .filterWidth      = FCCU_FILTERWIDTH_UP_TO_50_US,
+    .debugEnable      = true,
+    .irqEnableType    = FCCU_IRQ_EN_NOIRQ,
+    .ncfTimeout       = 450000,
+    .configRun        = (fccu_eout_config_t *)&fccu1_EoutConfig0,
+    .lockType         = FCCU_LOCK_TYPE_NO_LOCK,
+    .ncfConfigNumber  = 2,
+    .callbackIsr      = NULL,
+    .callbackIsrParam = NULL
+};
+
+int main()
+{
+    fccu_irq_status_t irqStatus;
+    /* Initializes the FCCU module with fccu1_NcfConfig0 */
+    FCCU_DRV_Init(INST_FCCU1,fccu1_Control0, fccu1_NcfConfig0);
+    ...
+    /* Trigger Second configured Fault No 8 */
+    FCCU_DRV_SetNcfFake(INST_FCCU1,fccu1_NcfConfig0[1U]->functionID);
+    /* De-Initializes the FCCU module */
+    FCCU_DRV_Deinit(INST_FCCU1);
+    ...
+    while(1)
+    {
+        FCCU_DRV_IrqStatusGetEvent(INST_FCCU1, & irqStatus);
+        ...
+        FCCU_DRV_IrqStatusSetEvent(INST_FCCU1, FCCU_ISR_NO);
+    }
+    return 0;
+}
+
+~~~~~
+
+This is example code to configure the FCCU driver use FCCU_DRV_GetDefaultConfig function:
+~~~~~{.c}
+/*! @brief Device instance number */
+#define INST_FCCU1 0U
+
+int main()
+{
+    fccu_irq_status_t irqStatus;
+    /* Declare default variables */
+    fccu_control_t defaultControlConfig;
+    fccu_config_ncf_t defaultNcfConfig;
+    const fccu_config_ncf_t * defaultNcfConfigArr[] = { &defaultNcfConfig };
+
+    /* Retrieve configuration from the function FCCU_DRV_GetDefaultConfig */
+    (void) FCCU_DRV_GetDefaultConfig( &defaultControlConfig, &defaultNcfConfig);
+    /* Initialize Fccu module with default configuration */
+    status=FCCU_DRV_Init(INST_FCCU1, defaultControlConfig, defaultNcfConfigArr);
+    ...
+    /* Inject unmasked Non-Critical fault to FCCU */
+    (void)FCCU_DRV_SetNcfFake(INST_FCCU1,defaultNcfConfig.functionID);
+    /* De-Initializes the FCCU module */
+    FCCU_DRV_Deinit(INST_FCCU1);
+    ...
+    while(1)
+    {
+        FCCU_DRV_IrqStatusGetEvent(INST_FCCU1, & irqStatus);
+        ...
+        FCCU_DRV_IrqStatusSetEvent(INST_FCCU1, FCCU_ISR_NO);
+    }
+    return 0;
+}
+
+~~~~~
+*/

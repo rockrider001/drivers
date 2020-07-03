@@ -1,0 +1,109 @@
+/*!
+ * @defgroup eqadc_driver EQADC Driver
+ * @ingroup eqadc
+ * @brief Enhanced Queued Analog to Digital Converter Peripheral Driver.
+ *
+ * An EQADC module controls two independent Redundant Signed Digit (RSD) analog-to-digital (ADC) converter cores: ADC0 and ADC1 (referred as on-chip ADCs).
+ *
+ * Features of the EQADC include:
+ *    - Up to 24 dedicated external analog input pins to each EQADC module
+ *    - 16 pins shared between the two modules
+ *    - a Burst Trigger Generator, which is described in the SIU chapter
+ *    - Addition of bias/diagnostic pull up/down in the pad cell to support sharing ADC pins with SDADC inputs
+ *    - Targets up to 1.5M Sample/s (ADC_CLK=24 MHz) for differential conversions
+ *    - DMA support for filling in command queues and draining result queues
+ *
+ * The EQADC provides a parallel interface to two on-chip analog-to-digital converters (ADCs), and a parallel side interface to one or more on-chip digital signal processing (DSP) modules
+ * (for example, a decimation filter) - referred as companion modules. The two on-chip ADCs are architected to allow access to all the analog channels.
+ * The EQADC transfers commands from multiple Command FIFOs (CFIFOs) to the on-chip ADCs. The multiple Result FIFOs (RFIFOs) can receive data from the on-chip ADCs or from an on-chip DSP module.
+ * Data from the on-chip ADCs can be routed to the side interface, processed by the on-chip DSP and then routed back through the side interface to the RFIFOs.
+ * It also monitors the fullness of CFIFOs and RFIFOs, and accordingly generates DMA or interrupt requests to control data movement between the FIFOs and the system memory, which is external to the EQADC.
+ *
+ *
+ * ## Driver consideration ##
+ * There are two types of EQADC configuration registers: memory mapped (directly accessible at their corresponding address) and internal.
+ * The internal registers can be accessed only using a mechanism specific to EQADC - via configuration commands.
+ * EQADC_DRV_Init() allows configuration of all EQADC parameters, corresponding to both memory mapped and internal registers.
+ * The initialization is transparent for the user - EQADC parameters are grouped in eqadc_config_t based on the affected functionality (not on the type of registers to which they correspond)
+ *
+ * The configuration structure includes pointers to multiple arrays of configurations:
+ *    - eqadc_adc_config_t * adcConfigArray
+ *    - eqadc_cfifo_config_t * cfifoConfigArray
+ *    - eqadc_result_dma_config_t * resultDmaConfigArray
+ *    - eqadc_alternate_config_t * alternateConfigArray
+ *    - eqadc_ext_alternate_config_t * extAlternateConfigArray
+ *    - eqadc_chan_pull_config_t * chanPullConfigArray
+ *    - eqadc_stac_bus_client_config_t * stacBusClientConfigArray
+ * For EQADC to function with a minimum configuration, only the first two arrays are mandatory to have at least one element: the EQADC needs to have configured at least the properties for one on-chip ADC and one CFIFO.
+ * The rest of the arrays are optional. When the features accessible via an array are not required to be used, the pointer needs to be set to NULL and corresponding number of elements to 0.
+ *
+ * The driver also provides EQADC_DRV_GetDefaultConfig() which retrieves the default configuration - please refer to function description for details on usage.
+ *
+ * After initialization, the user needs to push EQADC conversion commands (eqadc_conv_cmd_t) using EQADC_DRV_PushCfifoConvCmd(). The driver also offers support for using DMA transfers to automatically push commands in command queues:
+ * DMA support needs to be enabled via cfifoConfigArray in eqadc_config_t. The input command buffers (cQueues) can be prepared using EQADC_DRV_WriteMemConvCmd().
+ *
+ * The driver also provides DMA support for transferring results from the EQADC RFIFOs into system memory buffers.
+ * The specific parameters need to be configured in resultDmaConfigArray via ADC_DRV_Init(). Each array element is mapped to an RFIFO, and DMA support can be configured independently for each one of the RFIFOs.
+ * The RFIFOs which are not configured via resultDmaConfigArray, will work by default in Interrupt mode (issuing interrupts when they are full) and results will need to be read from software using EQADC_DRV_PopRfifoData().
+ * If resultDmaConfigArray is set to NULL, all RFIFOs will work in Interrupt mode. The destination RFIFO needs to be selected from each conversion command in eqadc_conv_cmd_t.
+ *
+ * Note regarding alternate configurations and extended alternate configurations: they correspond to a set of EQADC registers which enable special features provided by the EQADC (e.g. support to automatically send
+ * conversion results to companion modules for post-processing). These configurations can be configured in alternateConfigArray and extAlternateConfigArray via ADC_DRV_Init().
+ * After initialization, they need to be selected individually from each conversion command, in order for the conversion to use these special EQADC features/properties.
+ * They may also be configured, but not selected for any conversion command - in which case they will have no effect.
+ *
+ * The driver also provides API to allow sending EQADC configuration commands, for writing/reading on-chip ADC internal registers, post initialization: EQADC_DRV_PushCfifoConfigCmd() and EQADC_DRV_WriteMemConfigCmd() for DMA support.
+ * The address of each internal register can be selected using eqadc_onchip_adc_reg_address_t enum, and the write values can be formed using the EQADC_ADC_ macros and defines.
+ *
+ *
+ * NOTE: when DMA support is enabled (for either filling cfifos or draining rfifos) EQADC_DRV_Init() configures the selected DMA driver virtual channels and required settings in EQADC module.
+ * However, before calling EQADC_DRV_Init(), the user needs to initialize the DMA driver using EDMA_DRV_Init() and allocate the virtual channel numbers selected in eqadc_config_t.
+ *
+ *
+ * ## Interrupt handling ##
+ * The EQADC Driver in S32 SDK does not use interrupts internally. These can be defined by the user application.
+ * There are two ways to add an ADC interrupt:
+ *  1. Using the weak symbols defined by start-up code: define functions with name
+ *      of corresponding weak symbols, and they will be already registered as interrupt handlers.
+ *      If the methods corresponding to weak symbols
+ *      <tt>EQADC<b>x</b>_<b>y</b>_Handler(void)</tt> (x denotes instance number, y - the type of handler)
+ *      are not defined, the linker uses a default ISR. An error will be generated if
+ *      methods with the same name are defined multiple times. This method works
+ *      regardless of the placement of the interrupt vector table (Flash or RAM).
+ *  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
+ *      be used to dynamically change the ISR at run-time. This method works
+ *      only if the interrupt vector table is located in RAM (S32 SDK behavior).
+ *
+ * ## Clocking and pin configuration ##
+ * The EQADC Driver does not handle clock setup (done by Clock Manager) or any kind of pin
+ * configuration (done by PinSettings module). The driver assumes that correct clock
+ * configurations have been made, so it is the user's responsibility to set up
+ * clocking and pin configurations correctly.
+ *
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\src\eqadc\eqadc_driver.c
+ * ${S32SDK_PATH}\platform\drivers\src\eqadc\eqadc_hw_access.c
+ * \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+ * ${S32SDK_PATH}\platform\drivers\inc\
+ * \endverbatim
+ *
+ * ### Preprocessor symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ * \ref edma
+ * \ref clock_manager
+ * \ref osif
+ *
+ */

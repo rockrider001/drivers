@@ -1,0 +1,156 @@
+/*!
+    @defgroup mpu_e200 Memory Protection Unit for Power Architecture e200z (MPU_E200)
+    @brief The S32 SDK provides Peripheral Driver for the Memory Protection Unit for ARM Cortex R52 (MPU_E200) module of S32 SDK devices.
+    @details The memory protection unit for Power Architecture e200z (MPU_E200) provides hardware access control for all memory references generated in the device.@n
+
+    ## Hardware background ##
+
+    Memory Protection Unit (MPU) protects regions of memory, with the following feature set:
+    - 24-entry region descriptor table with support for 6 arbitrary-sized instruction memory regions, 12 arbitrary-sized data memory regions, and 6 additional arbitrary-sized regions programmable as instruction or data memory regions
+    - Ability to set access permissions and memory attributes on a per-region basis
+    - Process ID aware, with per-bit masking of TID values
+    - Capability for masking upper address bits in the range comparison
+    - Capability of bypassing permissions checking for selected access types
+    - Per-entry write-once logic for entry protection
+    - Hardware flash invalidation support and per-entry invalidation protection controls
+    - Ability to optionally utilize region descriptors for generating debug events and watchpoints
+    - Software managed by mpure and mpuwe instructions
+
+    @note If symbols from the linker are used, the compiler will issue warnings for "taking address of expression of type 'void'".
+    @note This is expected as linker symbols must be treated as void pointers as they do not point to variables locations but to memory start/end of region .
+ */
+
+/*!
+@addtogroup mpu_e200
+
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${S32SDK_PATH}\platform\drivers\src\mpu_e200\mpu_e200_driver.c
+${S32SDK_PATH}\platform\drivers\src\mpu_e200\mpu_e200_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Preprocessor symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+No special dependencies are required for this component
+
+ */
+
+/*!
+@addtogroup mpu_e200
+
+ ## Initialization and Deinitialize
+
+ This is example code to configure the MPU driver for E200 on S32Rx7x:
+1. Define MPU instance
+~~~~~{.c}
+    /* Status variable */
+    status_t status;
+~~~~~
+
+2. Configuration
+User configuration
+~~~~~{.c}
+    /* Number of entries in the configuration array */
+    #define MPU_E200_ENTRYARRAY_COUNT     (2U)
+
+    /* Configuration structure for Core MPU */
+    mpu_e200_module_cfg_t mpu_e200_Cfg = {
+        .supervisorBypass   = MPU_E200_BYPASS_NONE, /* Bypass options for supervisor mode */
+        .userBypass         = MPU_E200_BYPASS_NONE, /* Bypass options for user mode */
+        .debugOptions       = MPU_E200_DEBUG_NONE,  /* Debug event generation behaviour */
+        .tidControl         = false                 /* TID usage control */
+    };
+
+    /* Array of entry configurations */
+    mpu_e200_entry_cfg_t mpu_e200_EntryArray[MPU_E200_ENTRYARRAY_COUNT] =
+    {
+        {
+            .invalidProtection      = true,                     /* Entry is protected from invalidation */
+            .readOnly               = true,                     /* Entry cannot be written to anymore */
+            .debug                  = false,                    /* Does not generate debug event */
+            .regionType             = MPU_E200_DATA_REGION,     /* Entry is for data region */
+            .regionId               = 0x0U,                     /* Entry is for data region with ID 0 */
+            .addressMask            = 0x0U,                     /* No upper bits are masked */
+            .userRights             = MPU_E200_ACCESS_READWRITE,/* User can read and write in this region */
+            .supervisorRights       = MPU_E200_ACCESS_READWRITE,/* Supervisor can read and write in this region */
+            .cacheInhibitOverride   = false,                    /* Cache inhibit attribute is not overridden */
+            .guardOverride          = false,                    /* Guard attribute is not overridden */
+            .cacheInhibit           = false,                    /* This region is cacheable */
+            .guard                  = false,                    /* Accesses to this region are not guarded */
+            .tid                    = 0x0U,                     /* Entry matches with al process IDs */
+            .tidMask                = 0x0U,                     /* No bits are masked from the TID */
+            .startAddress           = (uint32_t)(&__data_start__),/* Start address is resolved at linked time by the __data_start__ symbol */
+            .endAddress             = (uint32_t)(&__data_end__) /* End address is resolved at linked time by the __data_end__ symbol */
+        },
+        {
+            .invalidProtection      = true,                 /* Entry is protected from invalidation */
+            .readOnly               = false,                /* Entry can be written to */
+            .debug                  = false,                /* Does not generate debug event */
+            .regionType             = MPU_E200_EXEC_REGION, /* Entry is for instruction region */
+            .regionId               = 0x0U,                 /* Entry is for instruction region with ID 0 */
+            .addressMask            = 0x0U,                 /* No upper bits are masked */
+            .userRights             = MPU_E200_ACCESS_READ, /* User can execute instructions in this region */
+            .supervisorRights       = MPU_E200_ACCESS_READ, /* Supervisor can execute instructions in this region */
+            .cacheInhibitOverride   = false,                /* Cache inhibit attribute is not overridden */
+            .guardOverride          = false,                /* Ignored for instruction regions */
+            .cacheInhibit           = false,                /* This region is cacheable */
+            .guard                  = false,                /* Ignored for instruction regions */
+            .tid                    = 0x0U,                 /* Entry matches with al process IDs */
+            .tidMask                = 0x0U,                 /* No bits are masked from the TID */
+            .startAddress           = 0x40000000,           /* Start address is given as absolute address */
+            .endAddress             = 0x40000000            /* End address is given as absolute address */
+        }
+    };
+~~~~~
+
+3. Initializes
+~~~~~{.c}
+    /* Initializes the MPU instance */
+    status = MPU_E200_DRV_Init(mpu_e200_Cfg, mpu_e200_EntryArray, MPU_E200_ENTRYARRAY_COUNT);
+~~~~~
+
+4. De-initializes
+~~~~~{.c}
+    /* De-initializes the MPU instance */
+    MPU_E200_DRV_DeInit();
+~~~~~
+
+## Basic Control Operations
+After MPU initialization:
+- The MPU_E200_DRV_AddEntry() can be used to add/update the new/existing entries.
+~~~~~{.c}
+    /* Make the instruction region with id 0 read-only */
+    mpu_e200_EntryArray[1U].readOnly = true;
+    /* Update the entry */
+    status = MPU_E200_DRV_AddEntry(&(mpu_e200_EntryArray[1U]));
+~~~~~
+- The MPU_E200_DRV_GetEntryConfig() can be used to see/check the current configuration of an already set entry
+~~~~~{.c}
+    /* Declare variable to store the configuration */
+    mpu_e200_entry_cfg_t readEntryCfg;
+    /* Get configuration of instruction region with id 0 */
+    status = MPU_E200_DRV_GetEntryConfig(0U, MPU_E200_EXEC_REGION, &readEntryCfg);
+~~~~~
+- The MPU_E200_DRV_GetModuleConfig() can be used to see/check the current configuration the MPU module
+~~~~~{.c}
+    /* Declare variable to store the configuration */
+    mpu_e200_module_cfg_t readModuleCfg;
+    /* Get configuration of instruction region with id 0 */
+    MPU_E200_DRV_GetModuleConfig(&readModuleCfg);
+~~~~~
+ */

@@ -1,0 +1,236 @@
+/*!
+   @defgroup qd_emios_driver Quadrature decode (eMIOS)
+   @ingroup emios
+   @details
+   @brief Quadrature decode mode (decode and analysis input signal).
+
+   ## Driver consideration ##
+   The MPC5777C have 2 eMIOS instances and each eMIOS instance have 16 channels. They can be configured to operate in the following global modes:
+
+    - General-Purpose Input/ Output (GPIO)
+    - Single-Action Input Capture (SAIC)
+    - Single-Action Output Compare (SAOC)
+    - Input Pulse-Width Measurement (IPWM)
+    - Input Period Measurement (IPM)
+    - Quadrature decode (QDEC)
+    - Double-Action Output Compare (DAOC)
+    - Modulus Counter (MC)
+    - Modulus Counter Buffered (MCB)
+    - Output Pulse-Width and Frequency Modulation Buffered (OPWFMB)
+    - Center Aligned Output Pulse Width Modulation with Dead Time Insertion Buffered (OPWMCB)
+    - Output Pulse-Width Modulation Buffered (OPWMB)
+    - Output Pulse-Width Modulation with Trigger (OPWMT)
+
+    ## Important note when use EMIOS_QD for MPC5777C device ##
+    1. The signals affected by this situation appear in IGF interaction with other modules. To route an affected signal directly to an eMIOS instance, program the
+      applicable channel of the applicable IGF instance:@n
+      1a. Ensure that IGF_MCRn[MDIS] is 0 and that the IGF channel is disabled: IGF_MCRn[FGEN] is 0.@n
+      1b. Configure the rising and falling edges for bypass:@n
+        • Rising edge: Write 00b to IGF_MCRn[RFM].
+        • Falling edge: Write 00b to IGF_MCRn[FFM].
+      1c. Enable the IGF channel: Write 1 to IGF_MCRn[FGEN].@n
+      Example Code enable input glitch filter use IGF driver:@
+      @code
+        #include "igf_driver.h"
+
+        /*! @brief Device instance number */
+        #define INST_IGF1         (0U)
+        #define IGF_EMIOS_CHANNEL (16U)
+
+        /* Enabled input glitch filter for EMIOS channel */
+        IGF_DRV_EnableChannel(INST_IGF1, IGF_EMIOS_CHANNEL);
+      @endcode
+    2. Some eMIOS input channels do not have filters because the input channels are not connected directly from pads. They are
+      connected from the DSPI module:@n
+      2a. eMIOS_0 input channel 4 and 5 are connected from the DSPI_B module.
+      2b. eMIOS_1 input channel 6 and 7 are connected from the DSPI_D module.
+
+    /*!
+    ## Integration guideline ##
+
+    ### Compilation units ###
+
+    The following files need to be compiled in the project:
+    \verbatim
+    ${S32SDK_PATH}\platform\drivers\src\emios\emios_qd_driver.c
+    ${S32SDK_PATH}\platform\drivers\src\emios\emios_common.c
+    ${S32SDK_PATH}\platform\drivers\src\emios\emios_hw_access.c
+    \endverbatim
+
+    ### Include path ###
+
+    The following paths need to be added to the include path of the toolchain:
+    \verbatim
+    ${S32SDK_PATH}\platform\drivers\inc\
+    \endverbatim
+
+    ### Preprocessor symbols ###
+
+    No special symbols are required for this component
+
+    ### Dependencies ###
+
+    \ref clock_manager
+    \ref interrupt_manager
+
+    */
+
+    When using eMIOS user should follow steps:
+
+    - Setup system clock
+         - Setup system clock api
+    - Initialize global eMIOS
+         - EMIOS_DRV_InitGlobal
+    - Init modes for the channels used
+         - EMIOS_DRV_QuadDecodeStart
+    - Init Pin
+         - Setup Pin api
+    - Enable global prescaler and timebase
+         - EMIOS_EnableGlobalEmios
+    - De-active mode for the channels used
+         - EMIOS_DRV_QuadDecodeStop
+
+    ## How to use eMIOS driver in your application ##
+    For all operation modes the user need to configure emios_common_param_t. This structure will be used for eMIOS global initialization
+    (EMIOS_DRV_InitGlobal). The next functions used are specific for each operation mode.
+    Example:
+    @code
+     /* eMIOS global configuration structure for eMIOS1_InitConfig0 */
+    emios_common_param_t eMIOS1_InitConfig0 =
+    {
+        true,              /* If true, all channel in eMIOS group can enter debug mode */
+        true,              /* Low power mode or normal mode */
+        1U,                /* Select the clock divider value for the global prescaler in range (1-256) */
+        false,             /* Enable or disable global prescaler */
+        true,              /* Enable or disable global timebase */
+#if defined(FEATURE_EMIOS_STAC_CLIENT)
+        false,             /* Enable external timebase or disable */
+        0U                 /* Select the address of a specific STAC server to which the STAC is assigned */
+#endif
+    };
+
+    /* eMIOS global configuration structure for eMIOS1_InitConfig1 */
+    emios_common_param_t eMIOS1_InitConfig1 =
+    {
+        true,              /* If true, all channel in eMIOS group can enter debug mode */
+        true,              /* Low power mode or normal mode */
+        1U,                /* Select the clock divider value for the global prescaler in range (1-256) */
+        false,             /* Enable or disable global prescaler */
+        true,              /* Enable or disable global timebase */
+#if defined(FEATURE_EMIOS_STAC_CLIENT)
+        false,             /* Enable external timebase or disable */
+        0U                 /* Select the address of a specific STAC server to which the STAC is assigned */
+#endif
+    };
+
+    /* Initialize eMIOS Global 0 */
+    EMIOS_DRV_InitGlobal(0U,&eMIOS1_InitConfig0);
+
+    /* Initialize eMIOS Global 1 */
+    EMIOS_DRV_InitGlobal(1U,&eMIOS1_InitConfig1);
+
+    /* Enable eMIOS Global 0 */
+    EMIOS_DRV_EnableGlobalEmios(0U);
+
+    /* Enable eMIOS Global 1 */
+    EMIOS_DRV_EnableGlobalEmios(1U);
+
+    @endcode
+
+    ### Quadrature decode mode ###
+    1. To Initialize quadrature decode mode, have 2 option:
+    - Count & direction encoder:
+      UC[n] input pin must be connected to the direction signal and UC[n-1] input pin must be connected to the count signal of the quadrature encoder. UC[n] EDPOL bit selects count direction  according to direction signal and UC[n-1] EDPOL bit selects if the internal counter is clocked by the rising or falling edge of the count signal.
+    - Phase_A and phase_B encoders:
+      UC[n] input pin must be connected to the phase_A signal and UC[n-1] input pin must be connected to the phase_B signal of the quadrature encoder. EDPOL bit selects the count direction  according to the phase difference between phase_A and phase_B signals.
+
+    For this mode the user needs to configure parameters such: Edge Polarity, input filter, quadrature decode mode. All this information is included in emios_qd_config_t data type.
+    Example:
+    @code
+    /* Defined emios group */
+    #define EMIOS_GROUP 0U
+    /* Defined emios channel */
+    #define EMIOS_CHANNEL  0U
+
+    /* Defined variable */
+    /* Status operation */
+    status_t status;
+    /* eMIOS Quadrature decode configuration structure for eMIOS1_QdChannelConfig0 */
+    emios_qd_config_t eMIOS1_QdChannelConfig0 =
+    {
+        /* Set default configures for Un-1 */
+        .ipfConfig.inputActiveMode = EMIOS_NEGATIVE_PULSE;
+        .ipfConfig.triggerMode = EMIOS_TRIGGER_EDGE_FALLING;
+        .ipfConfig.filterInput = EMIOS_INPUT_FILTER_BYPASS;
+        .ipfConfig.filterEn = true;
+        .ipfConfig.internalPrescaler = EMIOS_CLOCK_DIVID_BY_1;
+        .ipfConfig.internalPrescalerEn = true;
+        /* Set default configures for Un */
+        .mode                = EMIOS_MODE_COUNT_AND_DIR_ENCODE;
+        .initialVal          = 0U;
+        .inputActiveMode     = EMIOS_NEGATIVE_PULSE;
+        .internalPrescaler   = EMIOS_CLOCK_DIVID_BY_1;
+        .internalPrescalerEn = true;
+        .filterInput         = EMIOS_INPUT_FILTER_BYPASS;
+        .filterEn            = true;
+        .triggerMode         = EMIOS_TRIGGER_EDGE_FALLING;
+        .enableFlagIsr        = true;
+    };
+
+    /* Started quadrature decode mode for channel */
+    status = EMIOS_DRV_QuadDecodeStart(EMIOS_GROUP, EMIOS_CHANNEL, &eMIOS1_QdChannelConfig0);
+    @endcode
+
+    2. To stop quadrature decode then call the function EMIOS_DRV_QuadDecodeStop(). This function will stop quadrature decode and cleared internal counter register.
+    Example:
+    @code
+    Example:
+    @code
+    /* Defined emios group */
+    #define EMIOS_GROUP 0U
+    /* Defined emios channel */
+    #define EMIOS_CHANNEL  0U
+
+    /* Defined variable */
+    /* Status operation */
+    status_t status;
+
+    /* Stop quadrature decode mode on channel and clear internal counter register */
+    status = EMIOS_DRV_QuadDecodeStop(EMIOS_GROUP, EMIOS_CHANNEL);
+    @endcode
+    3. To get quadrature decode state then call the function EMIOS_DRV_QuadDecodeGetState(). This function will return the current quadrature decoder state (counter value, overflow flag
+    and overflow direction).
+    Example:
+    @code
+    Example:
+    @code
+    /* Defined emios group */
+    #define EMIOS_GROUP 0U
+    /* Defined emios channel */
+    #define EMIOS_CHANNEL  0U
+
+    /* Defined variable for get quadrature decode state */
+    emios_qd_state_t qdState;
+    /* Status operation */
+    status_t status;
+
+    /* Stop quadrature decode mode on channel and clear internal counter register */
+    status = EMIOS_DRV_QuadDecodeGetState(EMIOS_GROUP, EMIOS_CHANNEL, &qdState);
+    @endcode
+    4. To get default configuration for quadrature decode mode then call the function EMIOS_DRV_QuadDecodeGetDefaultConfig(). This function will get config default for quadrature decode mode.
+    Example:
+    @code
+    /* Defined emios group */
+    #define EMIOS_GROUP 0U
+    /* Defined emios channel */
+    #define EMIOS_CHANNEL  0U
+
+    /* Defined variable for get default configuration */
+    emios_qd_config_t qdGetDefaultConfig;
+    /* Status operation */
+    status_t status;
+
+    /* Get configuration default for quadrature decode mode */
+    status = EMIOS_DRV_QuadDecodeGetDefaultConfig(&qdGetDefaultConfig);
+    @endcode
+@}*/
