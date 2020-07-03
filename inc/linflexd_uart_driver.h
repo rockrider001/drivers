@@ -100,6 +100,8 @@ typedef struct
     uint8_t * rxBuff;                            /*!< The buffer of received data.*/
     volatile uint32_t txSize;                    /*!< The remaining number of bytes to be transmitted. */
     volatile uint32_t rxSize;                    /*!< The remaining number of bytes to be received. */
+    volatile uint32_t actualRxSize;		 /*!< Actual received size */
+    volatile uint32_t actualTxSize;		 /*!< Actual send size */
     volatile bool isTxBusy;                      /*!< True if there is an active transmit.*/
     volatile bool isRxBusy;                      /*!< True if there is an active receive.*/
     volatile bool isTxBlocking;                  /*!< True if transmit is blocking transaction. */
@@ -341,6 +343,30 @@ status_t LINFLEXD_UART_DRV_ReceiveData(uint32_t instance,
  *         corresponding to the error occurred (overrun, framing, or DMA errors).
  */
 status_t LINFLEXD_UART_DRV_GetReceiveStatus(uint32_t instance, uint32_t * bytesRemaining);
+
+/*FUNCTION**********************************************************************
+ *
+ * Function Name : LINFLEXD_UART_DRV_GetTransferSize
+ * Description   : This function returns actual send bytes count
+ *
+ *END**************************************************************************/
+/*!
+ * @brief This function returns actual send bytes count
+ *
+ * @param instance LINFlexD instance number
+ *
+ * @return The actual send byte count
+ */
+uint32_t LINFLEXD_UART_DRV_GetTransferSize(uint32_t instance);
+
+/*!
+ * @brief This function returns actual received bytes count
+ *
+ * @param instance LINFlexD instance number
+ *
+ * @return The actual received byte count
+ */
+uint32_t LINFLEXD_UART_DRV_GetReceiveSize(uint32_t instance);
 
 /*!
  * @brief Terminates a non-blocking receive early.

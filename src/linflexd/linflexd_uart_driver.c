@@ -831,6 +831,38 @@ status_t LINFLEXD_UART_DRV_ReceiveData(uint32_t instance,
 
 /*FUNCTION**********************************************************************
  *
+ * Function Name : LINFLEXD_UART_DRV_GetReceiveSize
+ * Description   : This function returns actual received bytes count
+ *
+ *END**************************************************************************/
+uint32_t LINFLEXD_UART_DRV_GetReceiveSize(uint32_t instance)
+{
+    DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
+
+    const linflexd_uart_state_t * uartState;
+    uartState = (linflexd_uart_state_t *)s_uartLINFlexDStatePtr[instance];
+
+    return uartState->actualRxSize;
+}
+
+/*FUNCTION**********************************************************************
+ *
+ * Function Name : LINFLEXD_UART_DRV_GetTransferSize
+ * Description   : This function returns actual send bytes count
+ *
+ *END**************************************************************************/
+uint32_t LINFLEXD_UART_DRV_GetTransferSize(uint32_t instance)
+{
+    DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
+
+    const linflexd_uart_state_t * uartState;
+    uartState = (linflexd_uart_state_t *)s_uartLINFlexDStatePtr[instance];
+
+    return uartState->actualTxSize;
+}
+
+/*FUNCTION**********************************************************************
+ *
  * Function Name : LINFLEXD_UART_DRV_GetReceiveStatus
  * Description   : This function returns whether the previous UART receive is
  * complete. When performing a non-blocking receive, the user can call this
@@ -1214,6 +1246,7 @@ static status_t LINFLEXD_UART_DRV_StartSendUsingInterrupts(uint32_t instance,
     uartState->txSize = txSize;
     uartState->isTxBusy = true;
     uartState->transmitStatus = STATUS_BUSY;
+    uartState->actualTxSize = 0;
 
     /* Enable the transmitter */
     LINFLEXD_SetTransmitterState(base, true);
@@ -1267,6 +1300,7 @@ static status_t LINFLEXD_UART_DRV_StartReceiveUsingInterrupts(uint32_t instance,
     uartState->rxBuff = rxBuff;
     uartState->rxSize = rxSize;
     uartState->receiveStatus = STATUS_BUSY;
+    uartState->actualRxSize = 0;
 
     /* Clear the flag */
     LINFLEXD_ClearStatusFlag(base, LINFlexD_UART_DATA_RECEPTION_COMPLETE_FLAG);
@@ -1396,6 +1430,7 @@ static status_t LINFLEXD_UART_DRV_StartSendUsingDma(uint32_t instance,
     uartState->txSize = 0U;
     uartState->isTxBusy = true;
     uartState->transmitStatus = STATUS_BUSY;
+    uartState->actualTxSize = 0;
 
     /* Configure the transfer control descriptor for the DMA channel */
     if((uartState->wordLength == LINFLEXD_UART_7_BITS) || (uartState->wordLength == LINFLEXD_UART_8_BITS))
@@ -1475,6 +1510,7 @@ static status_t LINFLEXD_UART_DRV_StartReceiveUsingDma(uint32_t instance,
     uartState->rxSize = 0U;
     uartState->isRxBusy = true;
     uartState->receiveStatus = STATUS_BUSY;
+    uartState->actualRxSize = 0;
 
     /* Configure the transfer control descriptor for the DMA channel */
     if((uartState->wordLength == LINFLEXD_UART_7_BITS) || (uartState->wordLength == LINFLEXD_UART_8_BITS))
@@ -1745,6 +1781,7 @@ static void LINFLEXD_UART_DRV_PutData(uint32_t instance)
         /* Update the state structure */
         ++uartState->txBuff;
         --uartState->txSize;
+        ++uartState->actualTxSize;
     }
     else
     {
@@ -1754,6 +1791,7 @@ static void LINFLEXD_UART_DRV_PutData(uint32_t instance)
             LINFLEXD_SetTxDataBuffer2Bytes(base, (uint16_t)(*uartState->txBuff));
             ++uartState->txBuff;
             --uartState->txSize;
+            ++uartState->actualTxSize;
         }
         else
         {
@@ -1762,6 +1800,7 @@ static void LINFLEXD_UART_DRV_PutData(uint32_t instance)
             ++uartState->txBuff;
             ++uartState->txBuff;
             uartState->txSize -= 2U;
+            uartState->actualTxSize += 2U;
         }
     }
 }
@@ -1789,6 +1828,7 @@ static void LINFLEXD_UART_DRV_GetData(uint32_t instance)
         /* Update the state structure */
         ++uartState->rxBuff;
         --uartState->rxSize;
+        ++uartState->actualRxSize;
     }
     else
     {
@@ -1798,6 +1838,7 @@ static void LINFLEXD_UART_DRV_GetData(uint32_t instance)
             *(uartState->rxBuff) = (uint8_t)(LINFLEXD_GetRxDataBuffer2Bytes(base));
             ++uartState->rxBuff;
             --uartState->rxSize;
+            ++uartState->actualRxSize;
         }
         else
         {
@@ -1806,6 +1847,7 @@ static void LINFLEXD_UART_DRV_GetData(uint32_t instance)
             ++uartState->rxBuff;
             ++uartState->rxBuff;
             uartState->rxSize -= 2U;
+            uartState->actualRxSize += 2;
         }
     }
 }
